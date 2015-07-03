@@ -150,7 +150,7 @@ public class ExecutionJobVertex implements Serializable {
 				LOG.info("Created input splits");
 				
 				if (inputSplits != null) {
-				    LOG.info("Input splits are not null");
+					LOG.info("Input splits are not null");
 				    
 					if (splitSource instanceof StrictlyLocalAssignment) {
 						inputSplitsPerSubtask = computeLocalInputSplitsPerTask(inputSplits);
@@ -159,11 +159,11 @@ public class ExecutionJobVertex implements Serializable {
 						splitAssigner = splitSource.getInputSplitAssigner(inputSplits);
 					}
 				} else {
-				    LOG.info("Input splits are null");
+					LOG.info("Input splits are null");
 				}
 			}
 			else {
-			    LOG.info("Split source is null");
+				LOG.info("Split source is null");
 			    
 				inputSplits = null;
 			}
