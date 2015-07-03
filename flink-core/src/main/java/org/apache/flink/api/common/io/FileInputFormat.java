@@ -542,6 +542,8 @@ public abstract class FileInputFormat<OT> implements InputFormat<OT, FileInputSp
 					blockIndex = getBlockIndexForPosition(blocks, position, halfSplit, blockIndex);
 					final FileInputSplit fis = new FileInputSplit(splitNum++, file.getPath(), position,
 						bytesUnassigned, blocks[blockIndex].getHosts());
+					LOG.info("Hosts for " + file.getPath().getName() + "[" + blockIndex + "] (" + position + "/" + splitSize + "): " +
+							Arrays.toString(blocks[blockIndex].getHosts()));
 					inputSplits.add(fis);
 				}
 			} else {
