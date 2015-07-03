@@ -446,6 +446,7 @@ public abstract class FileInputFormat<OT> implements InputFormat<OT, FileInputSp
 		long totalLength = 0;
 
 		final FileSystem fs = path.getFileSystem();
+		LOG.info("Filesystem: " + fs.getUri().toString());
 		final FileStatus pathFile = fs.getFileStatus(path);
 
 		if (pathFile.isDir()) {
@@ -527,7 +528,8 @@ public abstract class FileInputFormat<OT> implements InputFormat<OT, FileInputSp
 					// create a new split
 					FileInputSplit fis = new FileInputSplit(splitNum++, file.getPath(), position, splitSize,
 						blocks[blockIndex].getHosts());
-					LOG.info("Hosts for " + file.getPath().getName() + "[blockIndex] (" + position + "/" + splitSize + "): " + blocks[blockIndex].getHosts());
+					LOG.info("Hosts for " + file.getPath().getName() + "[" + blockIndex + "] (" + position + "/" + splitSize + "): " +
+						Arrays.toString(blocks[blockIndex].getHosts()));
 					inputSplits.add(fis);
 
 					// adjust the positions
@@ -557,6 +559,7 @@ public abstract class FileInputFormat<OT> implements InputFormat<OT, FileInputSp
 			}
 		}
 
+		LOG.info("Created " + inputSplits.size() + " input splits");
 		return inputSplits.toArray(new FileInputSplit[inputSplits.size()]);
 	}
 
