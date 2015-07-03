@@ -457,9 +457,11 @@ public abstract class FileInputFormat<OT> implements InputFormat<OT, FileInputSp
 		}
 		// returns if unsplittable
 		if(unsplittable) {
+			LOG.info(path.getName() + ": unsplittable");
 			int splitNum = 0;
 			for (final FileStatus file : files) {
 				final BlockLocation[] blocks = fs.getFileBlockLocations(file, 0, file.getLen());
+				LOG.info("Got " + blocks.length + " blocks for " + file.getPath().getName());
 				Set<String> hosts = new HashSet<String>();
 				for(BlockLocation block : blocks) {
 					hosts.addAll(Arrays.asList(block.getHosts()));
@@ -473,6 +475,8 @@ public abstract class FileInputFormat<OT> implements InputFormat<OT, FileInputSp
 				inputSplits.add(fis);
 			}
 			return inputSplits.toArray(new FileInputSplit[inputSplits.size()]);
+		} else {
+			LOG.info(path.getName() + ": splittable");
 		}
 		
 
@@ -508,6 +512,8 @@ public abstract class FileInputFormat<OT> implements InputFormat<OT, FileInputSp
 				// get the block locations and make sure they are in order with respect to their offset
 				final BlockLocation[] blocks = fs.getFileBlockLocations(file, 0, len);
 				Arrays.sort(blocks);
+				
+				LOG.info("Got " + blocks.length + " blocks for " + file.getPath().getName() + " (len > 0)");
 
 				long bytesUnassigned = len;
 				long position = 0;
@@ -537,6 +543,7 @@ public abstract class FileInputFormat<OT> implements InputFormat<OT, FileInputSp
 			} else {
 				// special case with a file of zero bytes size
 				final BlockLocation[] blocks = fs.getFileBlockLocations(file, 0, 0);
+				LOG.info("Got " + blocks.length + " blocks for " + file.getPath().getName() + " (len <= 0)");
 				String[] hosts;
 				if (blocks.length > 0) {
 					hosts = blocks[0].getHosts();

@@ -153,9 +153,11 @@ public class ExecutionJobVertex implements Serializable {
 					LOG.info("Input splits are not null");
 				    
 					if (splitSource instanceof StrictlyLocalAssignment) {
+						LOG.info("Strictly local assignment");
 						inputSplitsPerSubtask = computeLocalInputSplitsPerTask(inputSplits);
 						splitAssigner = new PredeterminedInputSplitAssigner(inputSplitsPerSubtask);
 					} else {
+						LOG.info("Not strictly local assignment");
 						splitAssigner = splitSource.getInputSplitAssigner(inputSplits);
 					}
 				} else {
