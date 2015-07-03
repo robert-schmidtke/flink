@@ -415,6 +415,7 @@ public abstract class FileInputFormat<OT> implements InputFormat<OT, FileInputSp
 
 	@Override
 	public LocatableInputSplitAssigner getInputSplitAssigner(FileInputSplit[] splits) {
+		LOG.info("Getting input split assigner for " + splits.length + " splits");
 		return new LocatableInputSplitAssigner(splits);
 	}
 
@@ -526,6 +527,7 @@ public abstract class FileInputFormat<OT> implements InputFormat<OT, FileInputSp
 					// create a new split
 					FileInputSplit fis = new FileInputSplit(splitNum++, file.getPath(), position, splitSize,
 						blocks[blockIndex].getHosts());
+					LOG.info("Hosts for " + file.getPath().getName() + "[blockIndex] (" + position + "/" + splitSize + "): " + blocks[blockIndex].getHosts());
 					inputSplits.add(fis);
 
 					// adjust the positions
