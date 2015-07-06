@@ -278,8 +278,8 @@ public class NetUtils {
 				
 				LOG.info("Found interface address " + interfaceAddress.toString() + ", " + interfaceAddress.getHostName() + ", " + interfaceAddress.getCanonicalHostName());
 				
-				if(interfaceAddress.getCanonicalHostName() == null || interfaceAddress.getCanonicalHostName().equals("")) {
-					LOG.info("Skipping because empty");
+				if(interfaceAddress.getCanonicalHostName() == null || interfaceAddress.getCanonicalHostName().equals("") || interfaceAddress.getCanonicalHostName().equals(interfaceAddress.getHostAddress())) {
+					LOG.info("Skipping");
 					continue;
 				}
 				
