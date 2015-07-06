@@ -18,6 +18,7 @@
 
 package org.apache.flink.api.common.io;
 
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.LinkedList;
@@ -25,11 +26,11 @@ import java.util.Locale;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.apache.flink.core.io.InputSplitAssigner;
 import org.apache.flink.core.io.LocatableInputSplit;
 import org.apache.flink.util.NetUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * The locatable input split assigner assigns to each host splits that are local, before assigning
@@ -104,12 +105,16 @@ public final class LocatableInputSplitAssigner implements InputSplitAssigner {
 		}
 
 		host = host.toLowerCase(Locale.US);
+		
+		LOG.info("For host: " + host + " (we're on " + System.getenv("HOSTNAME") + ")");
 
 		// for any non-null host, we take the list of non-null splits
 		LocatableInputSplitChooser localSplits = this.localPerHost.get(host);
 
 		// if we have no list for this host yet, create one
 		if (localSplits == null) {
+			LOG.info("No local splits");
+			
 			localSplits = new LocatableInputSplitChooser();
 
 			// lock the list, to be sure that others have to wait for that host's local list
@@ -128,7 +133,9 @@ public final class LocatableInputSplitAssigner implements InputSplitAssigner {
 						remaining = this.unassigned.toArray(new LocatableInputSplitWithCount[this.unassigned.size()]);
 					}
 
+					LOG.info("Got " + remaining.length + " reminaing splits with count");
 					for (LocatableInputSplitWithCount isw : remaining) {
+						LOG.info("isLocal(" + host + ", " + Arrays.toString(isw.getSplit().getHostnames()) + "): " + isLocal(host, isw.getSplit().getHostnames()));
 						if (isLocal(host, isw.getSplit().getHostnames())) {
 							// Split is local on host.
 							// Increment local count
@@ -145,6 +152,9 @@ public final class LocatableInputSplitAssigner implements InputSplitAssigner {
 				}
 			}
 		}
+		
+		LOG.info("Got " + localSplits.splits.size() + " local splits");
+		LOG.info("Hosts " + Arrays.toString(localPerHost.keySet().toArray(new String[localPerHost.keySet().size()])));
 
 
 		// at this point, we have a list of local splits (possibly empty)
