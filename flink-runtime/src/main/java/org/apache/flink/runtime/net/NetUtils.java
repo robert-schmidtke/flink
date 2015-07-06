@@ -182,6 +182,8 @@ public class NetUtils {
 
 		long currentSleepTime = MIN_SLEEP_TIME;
 		long elapsedTime = 0;
+		
+		LOG.info("Find connecting address for " + targetAddress.toString());
 
 		// loop while there is time left
 		while (elapsedTime < maxWaitMillis) {
@@ -195,6 +197,7 @@ public class NetUtils {
 			do {
 				InetAddress address = findAddressUsingStrategy(strategy, targetAddress, logging);
 				if (address != null) {
+					LOG.info("Found address: " + address.toString());
 					return address;
 				}
 
@@ -257,22 +260,28 @@ public class NetUtils {
 														boolean logging) throws IOException
 	{
 		final byte[] targetAddressBytes = targetAddress.getAddress().getAddress();
+		
+		LOG.info("Finding address for: " + targetAddress.toString() + " using strategy " + strategy);
 
 		// for each network interface
 		Enumeration<NetworkInterface> e = NetworkInterface.getNetworkInterfaces();
 		while (e.hasMoreElements()) {
 
 			NetworkInterface netInterface = e.nextElement();
+			
+			LOG.info("Looking into network interface " + netInterface.getName() + "/" + netInterface.getDisplayName());
 
 			// for each address of the network interface
 			Enumeration<InetAddress> ee = netInterface.getInetAddresses();
 			while (ee.hasMoreElements()) {
 				InetAddress interfaceAddress = ee.nextElement();
+				
+				LOG.info("Found interface address " + interfaceAddress.toString());
 
 				switch (strategy) {
 					case ADDRESS:
 						if (hasCommonPrefix(targetAddressBytes, interfaceAddress.getAddress())) {
-							LOG.debug("Target address {} and local address {} share prefix - trying to connect.",
+							LOG.info("Target address {} and local address {} share prefix - trying to connect.",
 										targetAddress, interfaceAddress);
 
 							if (tryToConnect(interfaceAddress, targetAddress, strategy.getTimeout(), logging)) {
@@ -283,7 +292,7 @@ public class NetUtils {
 
 					case FAST_CONNECT:
 					case SLOW_CONNECT:
-						LOG.debug("Trying to connect to {} from local address {} with timeout {}",
+						LOG.info("Trying to connect to {} from local address {} with timeout {}",
 								targetAddress, interfaceAddress, strategy.getTimeout());
 
 						if (tryToConnect(interfaceAddress, targetAddress, strategy.getTimeout(), logging)) {
@@ -293,7 +302,7 @@ public class NetUtils {
 
 					case HEURISTIC:
 						if (LOG.isDebugEnabled()) {
-							LOG.debug("Checking address {} using heuristics: linkLocal: {} loopback: {}",
+							LOG.info("Checking address {} using heuristics: linkLocal: {} loopback: {}",
 									interfaceAddress, interfaceAddress.isLinkLocalAddress(),
 									interfaceAddress.isLoopbackAddress());
 						}
@@ -311,6 +320,7 @@ public class NetUtils {
 			} // end for each address of the interface
 		} // end for each interface
 
+		LOG.info("no success in finding an address");
 		return null;
 	}
 
