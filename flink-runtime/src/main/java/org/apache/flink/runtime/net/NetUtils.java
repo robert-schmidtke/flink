@@ -276,10 +276,11 @@ public class NetUtils {
 			while (ee.hasMoreElements()) {
 				InetAddress interfaceAddress = ee.nextElement();
 				
-				LOG.info("Found interface address " + interfaceAddress.toString());
+				LOG.info("Found interface address " + interfaceAddress.toString() + ", " + interfaceAddress.getHostName() + ", " + interfaceAddress.getCanonicalHostName());
 				
 				if(interfaceAddress.getCanonicalHostName() == null || interfaceAddress.getCanonicalHostName().equals("")) {
 					LOG.info("Skipping because empty");
+					continue;
 				}
 				
 				switch (strategy) {
