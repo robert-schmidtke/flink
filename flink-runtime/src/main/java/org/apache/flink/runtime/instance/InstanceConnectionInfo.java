@@ -21,6 +21,7 @@ package org.apache.flink.runtime.instance;
 import java.io.IOException;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
+import java.util.Arrays;
 
 import org.apache.flink.core.io.IOReadableWritable;
 import org.apache.flink.core.memory.DataInputView;
@@ -84,6 +85,25 @@ public class InstanceConnectionInfo implements IOReadableWritable, Comparable<In
 		this.dataPort = dataPort;
 		this.inetAddress = inetAddress;
 		
+		SecurityManager sec = System.getSecurityManager();
+		if (sec != null) {
+			try {
+				sec.checkConnect(this.inetAddress.getHostAddress(), -1);
+				LOG.info("Check connect is ok");
+			} catch(Throwable t) {
+				LOG.warn("Error during check connect", t);
+			}
+		} else {
+			LOG.info("Security manager is null");
+		}
+		
+		try {
+			InetAddress[] arr = InetAddress.getAllByName(this.inetAddress.getHostAddress());
+			LOG.info("Known IPs for " + this.inetAddress.getHostAddress() + ": " + Arrays.toString(arr));
+		} catch (UnknownHostException e) {
+			LOG.warn("Error with getting all IPs for " + this.inetAddress.getHostAddress(), e);
+		}
+		
 		// get FQDN hostname on this TaskManager.
 		try {
 			this.fqdnHostName = this.inetAddress.getCanonicalHostName();
@@ -107,6 +127,7 @@ public class InstanceConnectionInfo implements IOReadableWritable, Comparable<In
 		else {
 			this.hostName = NetUtils.getHostnameFromFQDN(this.fqdnHostName);
 		}
+
 	}
 
 	/**
