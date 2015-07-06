@@ -277,7 +277,11 @@ public class NetUtils {
 				InetAddress interfaceAddress = ee.nextElement();
 				
 				LOG.info("Found interface address " + interfaceAddress.toString());
-
+				
+				if(interfaceAddress.getCanonicalHostName() == null || interfaceAddress.getCanonicalHostName().equals("")) {
+					LOG.info("Skipping because empty");
+				}
+				
 				switch (strategy) {
 					case ADDRESS:
 						if (hasCommonPrefix(targetAddressBytes, interfaceAddress.getAddress())) {
