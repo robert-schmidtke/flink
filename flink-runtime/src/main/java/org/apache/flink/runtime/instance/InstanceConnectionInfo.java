@@ -23,8 +23,6 @@ import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.util.Arrays;
 
-import javax.naming.NamingException;
-
 import org.apache.flink.core.io.IOReadableWritable;
 import org.apache.flink.core.memory.DataInputView;
 import org.apache.flink.core.memory.DataOutputView;
@@ -120,22 +118,11 @@ public class InstanceConnectionInfo implements IOReadableWritable, Comparable<In
 		if (this.fqdnHostName.equals(this.inetAddress.getHostAddress())) {
 			// this happens when the name lookup fails, either due to an exception,
 			// or because no hostname can be found for the address
-			try {
-				this.fqdnHostName = NetUtils.reverseLookup(this.inetAddress.getHostAddress());
-				this.hostName = NetUtils.getHostnameFromFQDN(this.fqdnHostName);
-				if (this.fqdnHostName.equals(this.inetAddress.getHostAddress())) {
-					this.hostName = this.fqdnHostName;
-					LOG.warn("No hostname could be resolved for the IP address {}, using IP address as host name. "
-							+ "Local input split assignment (such as for HDFS files) may be impacted.",
-							this.inetAddress.getHostAddress());
-				}
-			} catch (NamingException e) {
-				// take IP textual representation
-				this.hostName = this.fqdnHostName;
-				LOG.warn("No hostname could be resolved for the IP address {}, using IP address as host name ({}). "
-						+ "Local input split assignment (such as for HDFS files) may be impacted.",
-						this.inetAddress.getHostAddress(), e);
-			}
+			// take IP textual representation
+			this.hostName = this.fqdnHostName;
+			LOG.warn("No hostname could be resolved for the IP address {}, using IP address as host name. "
+					+ "Local input split assignment (such as for HDFS files) may be impacted.",
+					this.inetAddress.getHostAddress());
 		}
 		else {
 			this.hostName = NetUtils.getHostnameFromFQDN(this.fqdnHostName);

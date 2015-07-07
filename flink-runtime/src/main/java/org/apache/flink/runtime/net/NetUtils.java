@@ -27,6 +27,13 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.SocketAddress;
 import java.util.Enumeration;
+import java.util.Properties;
+
+import javax.naming.Context;
+import javax.naming.NamingException;
+import javax.naming.directory.Attribute;
+import javax.naming.directory.Attributes;
+import javax.naming.directory.InitialDirContext;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -184,7 +191,7 @@ public class NetUtils {
 		long elapsedTime = 0;
 		
 		LOG.info("Find connecting address for " + targetAddress.toString());
-
+		
 		// loop while there is time left
 		while (elapsedTime < maxWaitMillis) {
 			AddressDetectionState strategy = AddressDetectionState.ADDRESS;
@@ -198,7 +205,13 @@ public class NetUtils {
 				InetAddress address = findAddressUsingStrategy(strategy, targetAddress, logging);
 				if (address != null) {
 					LOG.info("Found address: " + address.toString());
-					return address;
+					try {
+						String hostName = reverseLookup(address.getHostAddress());
+						LOG.info("Determined hostname: {}", hostName);
+						return InetAddress.getByAddress(hostName, address.getAddress());
+					} catch (NamingException e) {
+						LOG.warn("Error during reverse lookup: {}", e);
+					}
 				}
 
 				// pick the next strategy
@@ -376,6 +389,39 @@ public class NetUtils {
 		finally {
 			socket.close();
 		}
+	}
+	
+	/**
+	 * Gets the FQDN for the provided IP address.
+	 * 
+	 * @param ipAddress
+	 * @return
+	 * @throws NamingException 
+	 */
+	private static String reverseLookup(String ipAddress) throws NamingException {
+		/* http://www.captechconsulting.com/blogs/accessing-the-dusty-corners-of-dns-with-java */
+		
+		Properties env = new Properties();
+		env.put(Context.INITIAL_CONTEXT_FACTORY, "com.sun.jndi.dns.DnsContextFactory");
+		InitialDirContext idc = new InitialDirContext(env);
+		
+		// Reverse IP.
+		String[] parts = ipAddress.split("\\.");
+		ipAddress = "";
+		for (int i = parts.length - 1; i >= 0; i--) {
+			ipAddress += parts[i] + ".";
+		}
+		ipAddress += "in-addr.arpa.";
+		
+		String fqdn = "";
+		
+		Attributes attrs = idc.getAttributes(ipAddress, new String[] { "PTR" });
+		Attribute attr = attrs.get("PTR");
+		if (attr != null) {
+			fqdn = (String) attr.get(0);
+		}
+
+		return fqdn;
 	}
 
 	/**

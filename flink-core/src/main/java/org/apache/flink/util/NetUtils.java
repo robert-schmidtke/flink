@@ -20,13 +20,6 @@ package org.apache.flink.util;
 
 import java.net.MalformedURLException;
 import java.net.URL;
-import java.util.Properties;
-
-import javax.naming.Context;
-import javax.naming.NamingException;
-import javax.naming.directory.Attribute;
-import javax.naming.directory.Attributes;
-import javax.naming.directory.InitialDirContext;
 
 public class NetUtils {
 	
@@ -68,38 +61,5 @@ public class NetUtils {
 		} catch (MalformedURLException e) {
 			throw new IllegalArgumentException("The given host:port ('"+hostPort+"') is invalid", e);
 		}
-	}
-	
-	/**
-	 * Gets the FQDN for the provided IP address.
-	 * 
-	 * @param ipAddress
-	 * @return
-	 * @throws NamingException 
-	 */
-	public static String reverseLookup(String ipAddress) throws NamingException {
-		/* http://www.captechconsulting.com/blogs/accessing-the-dusty-corners-of-dns-with-java */
-		
-		Properties env = new Properties();
-		env.put(Context.INITIAL_CONTEXT_FACTORY, "com.sun.jndi.dns.DnsContextFactory");
-		InitialDirContext idc = new InitialDirContext(env);
-		
-		// Reverse IP.
-		String[] parts = ipAddress.split("\\.");
-		ipAddress = "";
-		for (int i = parts.length - 1; i >= 0; i--) {
-			ipAddress += parts[i] + ".";
-		}
-		ipAddress += "in-addr.arpa.";
-		
-		String fqdn = "";
-		
-		Attributes attrs = idc.getAttributes(ipAddress, new String[] { "PTR" });
-		Attribute attr = attrs.get("PTR");
-		if (attr != null) {
-			fqdn = (String) attr.get(0);
-		}
-
-		return fqdn;
 	}
 }
