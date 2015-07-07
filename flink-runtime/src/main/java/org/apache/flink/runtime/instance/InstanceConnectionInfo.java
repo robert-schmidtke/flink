@@ -109,6 +109,8 @@ public class InstanceConnectionInfo implements IOReadableWritable, Comparable<In
 		else {
 			this.hostName = NetUtils.getHostnameFromFQDN(this.fqdnHostName);
 		}
+		
+		LOG.info("this.hostName = {}, this.fqdnHostName = {}", this.hostName, this.fqdnHostName);
 
 	}
 
