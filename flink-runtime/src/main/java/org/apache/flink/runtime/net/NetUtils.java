@@ -205,13 +205,7 @@ public class NetUtils {
 				InetAddress address = findAddressUsingStrategy(strategy, targetAddress, logging);
 				if (address != null) {
 					LOG.info("Found address: " + address.toString());
-					try {
-						String hostName = reverseLookup(address.getHostAddress());
-						LOG.info("Determined hostname: {}", hostName);
-						return InetAddress.getByAddress(hostName, address.getAddress());
-					} catch (NamingException e) {
-						LOG.warn("Error during reverse lookup: {}", e);
-					}
+					return address;
 				}
 
 				// pick the next strategy
@@ -291,11 +285,6 @@ public class NetUtils {
 				
 				LOG.info("Found interface address " + interfaceAddress.toString() + ", " + interfaceAddress.getHostName() + ", " + interfaceAddress.getCanonicalHostName());
 				
-				if(interfaceAddress.getCanonicalHostName() == null || interfaceAddress.getCanonicalHostName().equals("") || interfaceAddress.getCanonicalHostName().equals(interfaceAddress.getHostAddress())) {
-					LOG.info("Skipping");
-					continue;
-				}
-				
 				switch (strategy) {
 					case ADDRESS:
 						if (hasCommonPrefix(targetAddressBytes, interfaceAddress.getAddress())) {
@@ -303,7 +292,14 @@ public class NetUtils {
 										targetAddress, interfaceAddress);
 
 							if (tryToConnect(interfaceAddress, targetAddress, strategy.getTimeout(), logging)) {
-								return interfaceAddress;
+								try {
+									String hostName = reverseLookup(interfaceAddress.getHostAddress());
+									LOG.info("Determined hostname: {}", hostName);
+									return InetAddress.getByAddress(hostName, interfaceAddress.getAddress());
+								} catch (NamingException nameEx) {
+									LOG.warn("Error during reverse lookup: {}", nameEx);
+									return interfaceAddress;
+								}
 							}
 						}
 						break;
