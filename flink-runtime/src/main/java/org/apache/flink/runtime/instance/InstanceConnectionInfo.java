@@ -88,7 +88,7 @@ public class InstanceConnectionInfo implements IOReadableWritable, Comparable<In
 		
 		// get FQDN hostname on this TaskManager.
 		try {
-			this.fqdnHostName = this.inetAddress.getHostName(); // this.inetAddress.getCanonicalHostName();
+			this.fqdnHostName = this.inetAddress.getCanonicalHostName();
 		}
 		catch (Throwable t) {
 			LOG.warn("Unable to determine the canonical hostname. Input split assignment (such as " +

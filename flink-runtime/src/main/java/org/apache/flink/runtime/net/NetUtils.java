@@ -293,13 +293,11 @@ public class NetUtils {
 
 							if (tryToConnect(interfaceAddress, targetAddress, strategy.getTimeout(), logging)) {
 								try {
-									String hostName = reverseLookup(interfaceAddress.getHostAddress());
-									LOG.info("Determined hostname: {}", hostName);
-									return InetAddress.getByAddress(hostName, interfaceAddress.getAddress());
-								} catch (NamingException nameEx) {
-									LOG.warn("Error during reverse lookup: {}", nameEx);
-									return interfaceAddress;
+									LOG.info("Reverse lookup: {}", reverseLookup(interfaceAddress.getHostAddress()));
+								} catch (NamingException e1) {
+									LOG.warn("Error during reverse lookup: {}", e1);
 								}
+								return interfaceAddress;
 							}
 						}
 						break;
