@@ -18,7 +18,6 @@
 
 package org.apache.flink.api.common.io;
 
-import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.LinkedList;
@@ -106,7 +105,7 @@ public final class LocatableInputSplitAssigner implements InputSplitAssigner {
 
 		host = host.toLowerCase(Locale.US);
 		
-		LOG.info("For host: " + host + " (we're on " + System.getenv("HOSTNAME") + ")");
+		LOG.info("Next input split for host: " + host + " (we're on " + System.getenv("HOSTNAME") + ")");
 
 		// for any non-null host, we take the list of non-null splits
 		LocatableInputSplitChooser localSplits = this.localPerHost.get(host);
@@ -135,7 +134,7 @@ public final class LocatableInputSplitAssigner implements InputSplitAssigner {
 
 					LOG.info("Got " + remaining.length + " reminaing splits with count");
 					for (LocatableInputSplitWithCount isw : remaining) {
-						LOG.info("isLocal(" + host + ", " + Arrays.toString(isw.getSplit().getHostnames()) + "): " + isLocal(host, isw.getSplit().getHostnames()));
+						// LOG.info("isLocal(" + host + ", " + Arrays.toString(isw.getSplit().getHostnames()) + "): " + isLocal(host, isw.getSplit().getHostnames()));
 						if (isLocal(host, isw.getSplit().getHostnames())) {
 							// Split is local on host.
 							// Increment local count
@@ -153,8 +152,8 @@ public final class LocatableInputSplitAssigner implements InputSplitAssigner {
 			}
 		}
 		
-		LOG.info("Got " + localSplits.splits.size() + " local splits");
-		LOG.info("Hosts " + Arrays.toString(localPerHost.keySet().toArray(new String[localPerHost.keySet().size()])));
+		LOG.info("Got " + localSplits.splits.size() + " local splits for " + host);
+		// LOG.info("Hosts " + Arrays.toString(localPerHost.keySet().toArray(new String[localPerHost.keySet().size()])));
 
 
 		// at this point, we have a list of local splits (possibly empty)
@@ -215,7 +214,7 @@ public final class LocatableInputSplitAssigner implements InputSplitAssigner {
 			return false;
 		}
 		for (String h : hosts) {
-			LOG.info("NetUtils.getHostnameFromFQDN(" + h.toLowerCase() + "): " + NetUtils.getHostnameFromFQDN(h.toLowerCase()) + " vs. " + flinkHost);
+			// LOG.info("NetUtils.getHostnameFromFQDN(" + h.toLowerCase() + "): " + NetUtils.getHostnameFromFQDN(h.toLowerCase()) + " vs. " + flinkHost);
 			if (h != null && NetUtils.getHostnameFromFQDN(h.toLowerCase()).equals(flinkHost)) {
 				return true;
 			}
