@@ -16,6 +16,8 @@
 # limitations under the License.
 ################################################################################
 
+# Disable default DNS lookup service and use another one.
+env.java.opts: -Dsun.net.spi.nameservice.provider.1=dns,sun
 
 #==============================================================================
 # Common
