@@ -410,6 +410,8 @@ public abstract class DelimitedInputFormat<OT> extends FileInputFormat<OT> {
 	public void open(FileInputSplit split) throws IOException {
 		super.open(split);
 		
+		LOG.info("Opening split {}[{}] on host {}", split.getPath().getName(), split.getSplitNumber(), System.getenv("HOSTNAME"));
+		
 		this.bufferSize = this.bufferSize <= 0 ? DEFAULT_READ_BUFFER_SIZE : this.bufferSize;
 		
 		if (this.readBuffer == null || this.readBuffer.length != this.bufferSize) {
@@ -423,6 +425,8 @@ public abstract class DelimitedInputFormat<OT> extends FileInputFormat<OT> {
 		this.limit = 0;
 		this.overLimit = false;
 		this.end = false;
+		
+		LOG.info("Split start: {} and length: {}", this.splitStart, this.splitLength);
 
 		if (this.splitStart != 0) {
 			this.stream.seek(this.splitStart);
@@ -558,6 +562,7 @@ public abstract class DelimitedInputFormat<OT> extends FileInputFormat<OT> {
 	}
 
 	private boolean fillBuffer() throws IOException {
+		LOG.info("Filling buffer");
 		// special case for reading the whole split.
 		if(this.splitLength == FileInputFormat.READ_WHOLE_SPLIT_FLAG) {
 			int read = this.stream.read(this.readBuffer, 0, readBuffer.length);
@@ -577,6 +582,8 @@ public abstract class DelimitedInputFormat<OT> extends FileInputFormat<OT> {
 			toRead = this.readBuffer.length;
 			this.overLimit = true;
 		}
+		
+		LOG.info("toRead: {}", toRead);
 
 		int read = this.stream.read(this.readBuffer, 0, toRead);
 
