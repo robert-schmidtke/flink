@@ -132,7 +132,7 @@ public final class LocatableInputSplitAssigner implements InputSplitAssigner {
 						remaining = this.unassigned.toArray(new LocatableInputSplitWithCount[this.unassigned.size()]);
 					}
 
-					LOG.info("Got " + remaining.length + " reminaing splits with count");
+					LOG.info("Got " + remaining.length + " remaining splits with count");
 					for (LocatableInputSplitWithCount isw : remaining) {
 						// LOG.info("isLocal(" + host + ", " + Arrays.toString(isw.getSplit().getHostnames()) + "): " + isLocal(host, isw.getSplit().getHostnames()));
 						if (isLocal(host, isw.getSplit().getHostnames())) {
@@ -169,7 +169,7 @@ public final class LocatableInputSplitAssigner implements InputSplitAssigner {
 					// found a valid split. Double check that it hasn't been assigned before.
 					if (this.unassigned.remove(split)) {
 						if (LOG.isInfoEnabled()) {
-							LOG.info("Assigning local split to host " + host);
+							LOG.info("Assigning local split[{}] to host {}", split.getSplit().getSplitNumber(), host);
 						}
 
 						localAssignments++;
@@ -190,7 +190,7 @@ public final class LocatableInputSplitAssigner implements InputSplitAssigner {
 					// found a valid split. Double check that it hasn't been assigned yet.
 					if (this.unassigned.remove(split)) {
 						if (LOG.isInfoEnabled()) {
-							LOG.info("Assigning remote split to host " + host);
+							LOG.info("Assigning remote split[{}] to host {}", split.getSplit().getSplitNumber(), host);
 						}
 
 						remoteAssignments++;
