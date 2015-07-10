@@ -20,10 +20,10 @@
 package org.apache.flink.api.common.io;
 
 import java.io.IOException;
+import java.io.PrintWriter;
+import java.io.StringWriter;
 import java.util.ArrayList;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.apache.flink.api.common.io.statistics.BaseStatistics;
 import org.apache.flink.api.common.operators.base.FileDataSourceBase;
 import org.apache.flink.configuration.ConfigConstants;
@@ -33,6 +33,8 @@ import org.apache.flink.core.fs.FileInputSplit;
 import org.apache.flink.core.fs.FileStatus;
 import org.apache.flink.core.fs.FileSystem;
 import org.apache.flink.core.fs.Path;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.google.common.base.Charsets;
 
@@ -581,6 +583,14 @@ public abstract class DelimitedInputFormat<OT> extends FileInputFormat<OT> {
 		
 		if(this.splitLength == 0) {
 			LOG.info("Early exit because splitlength is 0 (splitstart: {}, readpos: {})", this.splitStart, this.readPos);
+			try {
+				throw new RuntimeException();
+			} catch(Throwable t) {
+				StringWriter sw = new StringWriter();
+				PrintWriter pw = new PrintWriter(sw);
+				t.printStackTrace(pw);
+				LOG.info(sw.toString());
+			}
 			this.overLimit = true;
 			this.stream.close();
 			this.stream = null;
