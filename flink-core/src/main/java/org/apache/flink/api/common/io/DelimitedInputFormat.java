@@ -20,8 +20,6 @@
 package org.apache.flink.api.common.io;
 
 import java.io.IOException;
-import java.io.PrintWriter;
-import java.io.StringWriter;
 import java.util.ArrayList;
 
 import org.apache.flink.api.common.io.statistics.BaseStatistics;
