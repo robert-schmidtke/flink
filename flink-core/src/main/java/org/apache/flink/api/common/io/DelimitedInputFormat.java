@@ -20,8 +20,6 @@
 package org.apache.flink.api.common.io;
 
 import java.io.IOException;
-import java.io.PrintWriter;
-import java.io.StringWriter;
 import java.util.ArrayList;
 
 import org.apache.flink.api.common.io.statistics.BaseStatistics;
@@ -581,21 +579,21 @@ public abstract class DelimitedInputFormat<OT> extends FileInputFormat<OT> {
 			}
 		}
 		
-		if(this.splitLength == 0) {
-			LOG.info("Early exit because splitlength is 0 (splitstart: {}, readpos: {})", this.splitStart, this.readPos);
-			try {
-				throw new RuntimeException();
-			} catch(Throwable t) {
-				StringWriter sw = new StringWriter();
-				PrintWriter pw = new PrintWriter(sw);
-				t.printStackTrace(pw);
-				LOG.info(sw.toString());
-			}
-			this.overLimit = true;
-			this.stream.close();
-			this.stream = null;
-			return false;
-		}
+//		if(this.splitLength == 0) {
+//			LOG.info("Early exit because splitlength is 0 (splitstart: {}, readpos: {})", this.splitStart, this.readPos);
+//			try {
+//				throw new RuntimeException();
+//			} catch(Throwable t) {
+//				StringWriter sw = new StringWriter();
+//				PrintWriter pw = new PrintWriter(sw);
+//				t.printStackTrace(pw);
+//				LOG.info(sw.toString());
+//			}
+//			this.overLimit = true;
+//			this.stream.close();
+//			this.stream = null;
+//			return false;
+//		}
 		
 		// else ..
 		int toRead = this.splitLength > this.readBuffer.length ? this.readBuffer.length : (int) this.splitLength;
