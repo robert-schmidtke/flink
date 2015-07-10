@@ -581,22 +581,22 @@ public abstract class DelimitedInputFormat<OT> extends FileInputFormat<OT> {
 			}
 		}
 		
-		if(this.splitLength == 0) {
-			LOG.info("Early exit because splitlength is 0 (splitstart: {}, readpos: {})", this.splitStart, this.readPos);
-			try {
-				throw new RuntimeException();
-			} catch(Throwable t) {
-				StringWriter sw = new StringWriter();
-				PrintWriter pw = new PrintWriter(sw);
-				t.printStackTrace(pw);
-				LOG.info(sw.toString());
-			}
-			this.overLimit = true;
-			this.splitLength -= this.readBuffer.length;
-			this.readPos = 0;
-			this.limit = this.readBuffer.length;
-			return true;
-		}
+//		if(this.splitLength == 0) {
+//			LOG.info("Early exit because splitlength is 0 (splitstart: {}, readpos: {})", this.splitStart, this.readPos);
+//			try {
+//				throw new RuntimeException();
+//			} catch(Throwable t) {
+//				StringWriter sw = new StringWriter();
+//				PrintWriter pw = new PrintWriter(sw);
+//				t.printStackTrace(pw);
+//				LOG.info(sw.toString());
+//			}
+//			this.overLimit = true;
+//			this.splitLength -= this.readBuffer.length;
+//			this.readPos = 0;
+//			this.limit = this.readBuffer.length;
+//			return true;
+//		}
 		
 		// else ..
 		int toRead = this.splitLength > this.readBuffer.length ? this.readBuffer.length : (int) this.splitLength;
