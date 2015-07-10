@@ -678,6 +678,8 @@ public abstract class FileInputFormat<OT> implements InputFormat<OT, FileInputSp
 		if (LOG.isDebugEnabled()) {
 			LOG.debug("Opening input split " + fileSplit.getPath() + " [" + this.splitStart + "," + this.splitLength + "]");
 		}
+		
+		LOG.info("Opening input split " + fileSplit.getPath() + " [" + this.splitStart + "," + this.splitLength + "]");
 
 		
 		// open the split in an asynchronous thread
