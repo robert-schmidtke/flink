@@ -598,7 +598,7 @@ public abstract class DelimitedInputFormat<OT> extends FileInputFormat<OT> {
 		// else ..
 		int toRead = this.splitLength > this.readBuffer.length ? this.readBuffer.length : (int) this.splitLength;
 		if (this.splitLength <= 0) {
-			toRead = this.readBuffer.length;
+			// toRead = this.readBuffer.length;
 			this.overLimit = true;
 		}
 		
