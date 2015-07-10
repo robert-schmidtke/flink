@@ -580,7 +580,7 @@ public abstract class DelimitedInputFormat<OT> extends FileInputFormat<OT> {
 		}
 		
 		if(this.splitLength == 0) {
-			LOG.info("Early exit because splitlength is 0");
+			LOG.info("Early exit because splitlength is 0 (splitstart: {}, readpos: {})", this.splitStart, this.readPos);
 			this.overLimit = true;
 			this.stream.close();
 			this.stream = null;
