@@ -413,6 +413,7 @@ public abstract class DelimitedInputFormat<OT> extends FileInputFormat<OT> {
 		super.open(split);
 		
 		LOG.info("Opening split {}[{}] on host {}", split.getPath().getName(), split.getSplitNumber(), System.getenv("HOSTNAME"));
+		LOG.info("Delimiter length: {}", this.delimiter.length);
 		
 		this.bufferSize = this.bufferSize <= 0 ? DEFAULT_READ_BUFFER_SIZE : this.bufferSize;
 		
