@@ -141,6 +141,8 @@ public abstract class DelimitedInputFormat<OT> extends FileInputFormat<OT> {
 
 	private transient boolean end;
 	
+	private transient int numRecords;
+	
 	
 	// --------------------------------------------------------------------------------------------
 	//  The configuration parameters. Configured on the instance and serialized to be shipped.
@@ -425,6 +427,7 @@ public abstract class DelimitedInputFormat<OT> extends FileInputFormat<OT> {
 		this.limit = 0;
 		this.overLimit = false;
 		this.end = false;
+		this.numRecords = 0;
 		
 		LOG.info("Split start: {} and length: {}", this.splitStart, this.splitLength);
 
@@ -455,8 +458,10 @@ public abstract class DelimitedInputFormat<OT> extends FileInputFormat<OT> {
 	@Override
 	public OT nextRecord(OT record) throws IOException {
 		if (readLine()) {
+			++this.numRecords;
 			return readRecord(record, this.currBuffer, this.currOffset, this.currLen);
 		} else {
+			LOG.info("Read {} records", this.numRecords);
 			this.end = true;
 			return null;
 		}
