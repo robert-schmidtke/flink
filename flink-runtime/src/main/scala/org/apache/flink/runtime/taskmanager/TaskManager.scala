@@ -36,7 +36,8 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import grizzled.slf4j.Logger
 
 import org.apache.flink.configuration.{Configuration, ConfigConstants, GlobalConfiguration, IllegalConfigurationException}
-import org.apache.flink.runtime.messages.checkpoint.{ConfirmCheckpoint, TriggerCheckpoint, AbstractCheckpointMessage}
+import org.apache.flink.runtime.messages.checkpoint.{NotifyCheckpointComplete, TriggerCheckpoint, AbstractCheckpointMessage}
+import org.apache.flink.runtime.accumulators.{AccumulatorSnapshot, AccumulatorRegistry}
 import org.apache.flink.runtime.{StreamingMode, ActorSynchronousLogging, ActorLogMessages}
 import org.apache.flink.runtime.akka.AkkaUtils
 import org.apache.flink.runtime.blob.{BlobService, BlobCache}
@@ -65,8 +66,10 @@ import org.apache.flink.runtime.util.{ZooKeeperUtil, MathUtils, EnvironmentInfor
 
 import scala.concurrent._
 import scala.concurrent.duration._
+import scala.concurrent.forkjoin.ForkJoinPool
 import scala.util.{Failure, Success}
 import scala.collection.JavaConverters._
+import scala.collection.JavaConversions._
 
 import scala.language.postfixOps
 
@@ -306,100 +309,100 @@ extends Actor with ActorLogMessages with ActorSynchronousLogging {
     if (!isConnected) {
       log.debug(s"Dropping message $message because the TaskManager is currently " +
         "not connected to a JobManager.")
-    }
+    } else {
+      // we order the messages by frequency, to make sure the code paths for matching
+      // are as short as possible
+      message match {
 
-    // we order the messages by frequency, to make sure the code paths for matching
-    // are as short as possible
-    message match {
+        // tell the task about the availability of a new input partition
+        case UpdateTaskSinglePartitionInfo(executionID, resultID, partitionInfo) =>
+          updateTaskInputPartitions(executionID, List((resultID, partitionInfo)))
 
-      // tell the task about the availability of a new input partition
-      case UpdateTaskSinglePartitionInfo(executionID, resultID, partitionInfo) =>
-        updateTaskInputPartitions(executionID, List((resultID, partitionInfo)))
+        // tell the task about the availability of some new input partitions
+        case UpdateTaskMultiplePartitionInfos(executionID, partitionInfos) =>
+          updateTaskInputPartitions(executionID, partitionInfos)
 
-      // tell the task about the availability of some new input partitions
-      case UpdateTaskMultiplePartitionInfos(executionID, partitionInfos) =>
-        updateTaskInputPartitions(executionID, partitionInfos)
-
-      // discards intermediate result partitions of a task execution on this TaskManager
-      case FailIntermediateResultPartitions(executionID) =>
-        log.info("Discarding the results produced by task execution " + executionID)
-        if (network.isAssociated) {
-          try {
-            network.getPartitionManager.releasePartitionsProducedBy(executionID)
-          } catch {
-            case t: Throwable => killTaskManagerFatal(
-                "Fatal leak: Unable to release intermediate result partition data", t)
+        // discards intermediate result partitions of a task execution on this TaskManager
+        case FailIntermediateResultPartitions(executionID) =>
+          log.info("Discarding the results produced by task execution " + executionID)
+          if (network.isAssociated) {
+            try {
+              network.getPartitionManager.releasePartitionsProducedBy(executionID)
+            } catch {
+              case t: Throwable => killTaskManagerFatal(
+              "Fatal leak: Unable to release intermediate result partition data", t)
+            }
           }
-        }
 
-      // notifies the TaskManager that the state of a task has changed.
-      // the TaskManager informs the JobManager and cleans up in case the transition
-      // was into a terminal state, or in case the JobManager cannot be informed of the
-      // state transition
+        // notifies the TaskManager that the state of a task has changed.
+        // the TaskManager informs the JobManager and cleans up in case the transition
+        // was into a terminal state, or in case the JobManager cannot be informed of the
+        // state transition
 
-      case updateMsg @ UpdateTaskExecutionState(taskExecutionState: TaskExecutionState) =>
-        
-        // we receive these from our tasks and forward them to the JobManager
-        currentJobManager foreach {
-          jobManager => {
-            val futureResponse = (jobManager ? updateMsg)(askTimeout)
+        case updateMsg@UpdateTaskExecutionState(taskExecutionState: TaskExecutionState) =>
 
-            val executionID = taskExecutionState.getID
+          // we receive these from our tasks and forward them to the JobManager
+          currentJobManager foreach {
+            jobManager => {
+              val futureResponse = (jobManager ? updateMsg)(askTimeout)
 
-            futureResponse.mapTo[Boolean].onComplete {
-              // IMPORTANT: In the future callback, we cannot directly modify state
-              //            but only send messages to the TaskManager to do those changes
-              case Success(result) =>
-                if (!result) {
-                  self ! FailTask(executionID,
-                    new Exception("Task has been cancelled on the JobManager."))
-                }
-                
-              case Failure(t) =>
-                self ! FailTask(executionID, new Exception(
-                  "Failed to send ExecutionStateChange notification to JobManager"))
-            }(context.dispatcher)
+              val executionID = taskExecutionState.getID
+
+              futureResponse.mapTo[Boolean].onComplete {
+                // IMPORTANT: In the future callback, we cannot directly modify state
+                //            but only send messages to the TaskManager to do those changes
+                case Success(result) =>
+                  if (!result) {
+                    self ! FailTask(executionID,
+                      new Exception("Task has been cancelled on the JobManager."))
+                  }
+
+                case Failure(t) =>
+                  self ! FailTask(executionID, new Exception(
+                    "Failed to send ExecutionStateChange notification to JobManager"))
+              }(context.dispatcher)
+            }
           }
-        }
 
-      // removes the task from the TaskManager and frees all its resources
-      case TaskInFinalState(executionID) =>
-        unregisterTaskAndNotifyFinalState(executionID)
+        // removes the task from the TaskManager and frees all its resources
+        case TaskInFinalState(executionID) =>
+          unregisterTaskAndNotifyFinalState(executionID)
 
-      // starts a new task on the TaskManager
-      case SubmitTask(tdd) =>
-        submitTask(tdd)
+        // starts a new task on the TaskManager
+        case SubmitTask(tdd) =>
+          submitTask(tdd)
 
-      // marks a task as failed for an external reason
-      // external reasons are reasons other than the task code itself throwing an exception
-      case FailTask(executionID, cause) =>
-        val task = runningTasks.get(executionID)
-        if (task != null) {
-          task.failExternally(cause)
-        } else {
-          log.debug(s"Cannot find task to fail for execution ${executionID})")
-        }
+        // marks a task as failed for an external reason
+        // external reasons are reasons other than the task code itself throwing an exception
+        case FailTask(executionID, cause) =>
+          val task = runningTasks.get(executionID)
+          if (task != null) {
+            task.failExternally(cause)
+          } else {
+            log.debug(s"Cannot find task to fail for execution ${executionID})")
+          }
 
-      // cancels a task
-      case CancelTask(executionID) =>
-        val task = runningTasks.get(executionID)
-        if (task != null) {
-          task.cancelExecution()
-          sender ! new TaskOperationResult(executionID, true)
-        } else {
-          log.debug(s"Cannot find task to cancel for execution ${executionID})")
-          sender ! new TaskOperationResult(executionID, false,
-              "No task with that execution ID was found.")
-        }
+        // cancels a task
+        case CancelTask(executionID) =>
+          val task = runningTasks.get(executionID)
+          if (task != null) {
+            task.cancelExecution()
+            sender ! new TaskOperationResult(executionID, true)
+          } else {
+            log.debug(s"Cannot find task to cancel for execution ${executionID})")
+            sender ! new TaskOperationResult(executionID, false,
+            "No task with that execution ID was found.")
+          }
 
-      case PartitionState(taskExecutionId, taskResultId, partitionId, state) =>
-        Option(runningTasks.get(taskExecutionId)) match {
-          case Some(task) =>
-            task.onPartitionStateUpdate(taskResultId, partitionId, state)
-          case None =>
-            log.debug(s"Cannot find task $taskExecutionId to respond with partition state.")
-        }
-    }
+        case PartitionState(taskExecutionId, taskResultId, partitionId, state) =>
+          Option(runningTasks.get(taskExecutionId)) match {
+            case Some(task) =>
+              task.onPartitionStateUpdate(taskResultId, partitionId, state)
+            case None =>
+              log.debug(s"Cannot find task $taskExecutionId to respond with partition state.")
+          }
+      }
+      }
   }
 
   /**
@@ -425,17 +428,16 @@ extends Actor with ActorLogMessages with ActorSynchronousLogging {
           log.debug(s"Taskmanager received a checkpoint request for unknown task $taskExecutionId.")
         }
 
-      case message: ConfirmCheckpoint =>
+      case message: NotifyCheckpointComplete =>
         val taskExecutionId = message.getTaskExecutionId
         val checkpointId = message.getCheckpointId
         val timestamp = message.getTimestamp
-        val state = message.getState
 
         log.debug(s"Receiver ConfirmCheckpoint ${checkpointId}@${timestamp} for $taskExecutionId.")
 
         val task = runningTasks.get(taskExecutionId)
         if (task != null) {
-          task.confirmCheckpoint(checkpointId, state)
+          task.notifyCheckpointComplete(checkpointId)
         } else {
           log.debug(
             s"Taskmanager received a checkpoint confirmation for unknown task $taskExecutionId.")
@@ -793,12 +795,12 @@ extends Actor with ActorLogMessages with ActorSynchronousLogging {
 
       // create the task. this does not grab any TaskManager resources or download
       // and libraries - the operation does not block
-      val execId = tdd.getExecutionId
       val task = new Task(tdd, memoryManager, ioManager, network, bcVarManager,
                           self, jobManagerActor, config.timeout, libCache, fileCache)
 
       log.info(s"Received task ${task.getTaskNameWithSubtasks}")
-      
+
+      val execId = tdd.getExecutionId
       // add the task to the map
       val prevTask = runningTasks.put(execId, task)
       if (prevTask != null) {
@@ -898,22 +900,28 @@ extends Actor with ActorLogMessages with ActorSynchronousLogging {
 
     val task = runningTasks.remove(executionID)
     if (task != null) {
-      
-        // the task must be in a terminal state
-        if (!task.getExecutionState.isTerminal) {
-          try {
-            task.failExternally(new Exception("Task is being removed from TaskManager"))
-          } catch {
-            case e: Exception => log.error("Could not properly fail task", e)
-          }
+
+      // the task must be in a terminal state
+      if (!task.getExecutionState.isTerminal) {
+        try {
+          task.failExternally(new Exception("Task is being removed from TaskManager"))
+        } catch {
+          case e: Exception => log.error("Could not properly fail task", e)
         }
+      }
 
-        log.info(s"Unregistering task and sending final execution state " +
-          s"${task.getExecutionState} to JobManager for task ${task.getTaskName} " +
-          s"(${task.getExecutionId})")
+      log.info(s"Unregistering task and sending final execution state " +
+        s"${task.getExecutionState} to JobManager for task ${task.getTaskName} " +
+        s"(${task.getExecutionId})")
 
-        self ! UpdateTaskExecutionState(new TaskExecutionState(
-          task.getJobID, task.getExecutionId, task.getExecutionState, task.getFailureCause))
+      val accumulators = {
+        val registry = task.getAccumulatorRegistry
+        registry.getSnapshot
+      }
+
+      self ! UpdateTaskExecutionState(new TaskExecutionState(
+        task.getJobID, task.getExecutionId, task.getExecutionState, task.getFailureCause,
+        accumulators))
     }
     else {
       log.error(s"Cannot find task with ID $executionID to unregister.")
@@ -931,9 +939,20 @@ extends Actor with ActorLogMessages with ActorSynchronousLogging {
   private def sendHeartbeatToJobManager(): Unit = {
     try {
       log.debug("Sending heartbeat to JobManager")
-      val report: Array[Byte] = metricRegistryMapper.writeValueAsBytes(metricRegistry)
-      currentJobManager foreach {
-        jm => jm ! Heartbeat(instanceID, report)
+      val metricsReport: Array[Byte] = metricRegistryMapper.writeValueAsBytes(metricRegistry)
+
+      val accumulatorEvents =
+        scala.collection.mutable.Buffer[AccumulatorSnapshot]()
+
+      runningTasks foreach {
+        case (execID, task) =>
+          val registry = task.getAccumulatorRegistry
+          val accumulators = registry.getSnapshot
+          accumulatorEvents.append(accumulators)
+      }
+
+       currentJobManager foreach {
+        jm => jm ! Heartbeat(instanceID, metricsReport, accumulatorEvents)
       }
     }
     catch {
@@ -1364,14 +1383,16 @@ object TaskManager {
   @throws(classOf[IllegalConfigurationException])
   @throws(classOf[IOException])
   @throws(classOf[Exception])
-  def startTaskManagerComponentsAndActor(configuration: Configuration,
-                                         actorSystem: ActorSystem,
-                                         taskManagerHostname: String,
-                                         taskManagerActorName: Option[String],
-                                         jobManagerPath: Option[String],
-                                         localTaskManagerCommunication: Boolean,
-                                         streamingMode: StreamingMode,
-                                         taskManagerClass: Class[_ <: TaskManager]): ActorRef = {
+  def startTaskManagerComponentsAndActor(
+      configuration: Configuration,
+      actorSystem: ActorSystem,
+      taskManagerHostname: String,
+      taskManagerActorName: Option[String],
+      jobManagerPath: Option[String],
+      localTaskManagerCommunication: Boolean,
+      streamingMode: StreamingMode,
+      taskManagerClass: Class[_ <: TaskManager])
+    : ActorRef = {
 
     // get and check the JobManager config
     val jobManagerAkkaUrl: String = jobManagerPath.getOrElse {
@@ -1381,17 +1402,20 @@ object TaskManager {
     }
 
     val (taskManagerConfig : TaskManagerConfiguration,
-         netConfig: NetworkEnvironmentConfiguration,
-         connectionInfo: InstanceConnectionInfo)
-
-         = parseTaskManagerConfiguration(configuration, taskManagerHostname,
-                                         localTaskManagerCommunication)
+      netConfig: NetworkEnvironmentConfiguration,
+      connectionInfo: InstanceConnectionInfo
+    ) = parseTaskManagerConfiguration(
+      configuration,
+      taskManagerHostname,
+      localTaskManagerCommunication)
 
     // pre-start checks
     checkTempDirs(taskManagerConfig.tmpDirPaths)
 
+    val executionContext = ExecutionContext.fromExecutor(new ForkJoinPool())
+
     // we start the network first, to make sure it can allocate its buffers first
-    val network = new NetworkEnvironment(taskManagerConfig.timeout, netConfig)
+    val network = new NetworkEnvironment(executionContext, taskManagerConfig.timeout, netConfig)
 
     // computing the amount of memory to use depends on how much memory is available
     // it strictly needs to happen AFTER the network stack has been initialized

@@ -25,6 +25,7 @@ import org.apache.flink.api.common.JobID;
 import org.apache.flink.api.common.cache.DistributedCache;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.core.fs.Path;
+import org.apache.flink.runtime.accumulators.AccumulatorRegistry;
 import org.apache.flink.runtime.blob.BlobKey;
 import org.apache.flink.runtime.broadcast.BroadcastVariableManager;
 import org.apache.flink.runtime.deployment.InputGateDeploymentDescriptor;
@@ -46,7 +47,7 @@ import org.apache.flink.runtime.jobgraph.IntermediateDataSetID;
 import org.apache.flink.runtime.jobgraph.IntermediateResultPartitionID;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 import org.apache.flink.runtime.jobgraph.tasks.AbstractInvokable;
-import org.apache.flink.runtime.jobgraph.tasks.CheckpointCommittingOperator;
+import org.apache.flink.runtime.jobgraph.tasks.CheckpointNotificationOperator;
 import org.apache.flink.runtime.jobgraph.tasks.CheckpointedOperator;
 import org.apache.flink.runtime.jobgraph.tasks.OperatorStateCarrier;
 import org.apache.flink.runtime.memorymanager.MemoryManager;
@@ -100,10 +101,10 @@ public class Task implements Runnable {
 
 	/** The class logger. */
 	private static final Logger LOG = LoggerFactory.getLogger(Task.class);
-	
+
 	/** The tread group that contains all task threads */
 	private static final ThreadGroup TASK_THREADS_GROUP = new ThreadGroup("Flink Task Threads");
-	
+
 	/** For atomic state updates */
 	private static final AtomicReferenceFieldUpdater<Task, ExecutionState> STATE_UPDATER =
 			AtomicReferenceFieldUpdater.newUpdater(Task.class, ExecutionState.class, "executionState");
@@ -176,12 +177,15 @@ public class Task implements Runnable {
 
 	/** The library cache, from which the task can request its required JAR files */
 	private final LibraryCacheManager libraryCache;
-	
+
 	/** The cache for user-defined files that the invokable requires */
 	private final FileCache fileCache;
-	
+
 	/** The gateway to the network stack, which handles inputs and produced results */
 	private final NetworkEnvironment network;
+
+	/** The registry of this task which enables live reporting of accumulators */
+	private final AccumulatorRegistry accumulatorRegistry;
 
 	/** The thread that executes the task */
 	private final Thread executingThread;
@@ -194,10 +198,10 @@ public class Task implements Runnable {
 
 	/** atomic flag that makes sure the invokable is canceled exactly once upon error */
 	private final AtomicBoolean invokableHasBeenCanceled;
-	
+
 	/** The invokable of this task, if initialized */
 	private volatile AbstractInvokable invokable;
-	
+
 	/** The current execution state of the task */
 	private volatile ExecutionState executionState = ExecutionState.CREATED;
 
@@ -245,12 +249,13 @@ public class Task implements Runnable {
 
 		this.memoryManager = checkNotNull(memManager);
 		this.ioManager = checkNotNull(ioManager);
-		this.broadcastVariableManager =checkNotNull(bcVarManager);
+		this.broadcastVariableManager = checkNotNull(bcVarManager);
+		this.accumulatorRegistry = new AccumulatorRegistry(jobId, executionId);
 
 		this.jobManager = checkNotNull(jobManagerActor);
 		this.taskManager = checkNotNull(taskManagerActor);
 		this.actorAskTimeout = new Timeout(checkNotNull(actorAskTimeout));
-		
+
 		this.libraryCache = checkNotNull(libraryCache);
 		this.fileCache = checkNotNull(fileCache);
 		this.network = checkNotNull(networkEnvironment);
@@ -359,6 +364,10 @@ public class Task implements Runnable {
 
 	public SingleInputGate getInputGateById(IntermediateDataSetID id) {
 		return inputGatesById.get(id);
+	}
+
+	public AccumulatorRegistry getAccumulatorRegistry() {
+		return accumulatorRegistry;
 	}
 
 	public Thread getExecutingThread() {
@@ -499,7 +508,8 @@ public class Task implements Runnable {
 			Environment env = new RuntimeEnvironment(jobId, vertexId, executionId,
 					taskName, taskNameWithSubtask, subtaskIndex, parallelism,
 					jobConfiguration, taskConfiguration,
-					userCodeClassLoader, memoryManager, ioManager, broadcastVariableManager,
+					userCodeClassLoader, memoryManager, ioManager,
+					broadcastVariableManager, accumulatorRegistry,
 					splitProvider, distributedCacheEntries,
 					writers, inputGates, jobManager);
 
@@ -518,7 +528,7 @@ public class Task implements Runnable {
 
 			// get our private reference onto the stack (be safe against concurrent changes) 
 			SerializedValue<StateHandle<?>> operatorState = this.operatorState;
-			
+
 			if (operatorState != null) {
 				if (invokable instanceof OperatorStateCarrier) {
 					try {
@@ -553,7 +563,7 @@ public class Task implements Runnable {
 			if (!STATE_UPDATER.compareAndSet(this, ExecutionState.DEPLOYING, ExecutionState.RUNNING)) {
 				throw new CancelTaskException();
 			}
-			
+
 			// notify everyone that we switched to running. especially the TaskManager needs
 			// to know this!
 			notifyObservers(ExecutionState.RUNNING, null);
@@ -653,7 +663,7 @@ public class Task implements Runnable {
 		finally {
 			try {
 				LOG.info("Freeing task resources for " + taskNameWithSubtask);
-				
+
 				// stop the async dispatcher.
 				// copy dispatcher reference to stack, against concurrent release
 				ExecutorService dispatcher = this.asyncCallDispatcher;
@@ -867,15 +877,15 @@ public class Task implements Runnable {
 	 */
 	public void triggerCheckpointBarrier(final long checkpointID, final long checkpointTimestamp) {
 		AbstractInvokable invokable = this.invokable;
-		
+
 		if (executionState == ExecutionState.RUNNING && invokable != null) {
 			if (invokable instanceof CheckpointedOperator) {
-				
+
 				// build a local closure 
 				final CheckpointedOperator checkpointer = (CheckpointedOperator) invokable;
 				final Logger logger = LOG;
 				final String taskName = taskNameWithSubtask;
-				
+
 				Runnable runnable = new Runnable() {
 					@Override
 					public void run() {
@@ -883,11 +893,11 @@ public class Task implements Runnable {
 							checkpointer.triggerCheckpoint(checkpointID, checkpointTimestamp);
 						}
 						catch (Throwable t) {
-							logger.error("Error while triggering checkpoint for " + taskName, t);
+							failExternally(new RuntimeException("Error while triggering checkpoint for " + taskName, t));
 						}
 					}
 				};
-				executeAsyncCallRunnable(runnable, "Checkpoint Trigger");
+				executeAsyncCallRunnable(runnable, "Checkpoint Trigger for " + taskName);
 			}
 			else {
 				LOG.error("Task received a checkpoint request, but is not a checkpointing task - "
@@ -899,15 +909,14 @@ public class Task implements Runnable {
 		}
 	}
 	
-	public void confirmCheckpoint(final long checkpointID, 
-		final SerializedValue<StateHandle<?>> state) {
+	public void notifyCheckpointComplete(final long checkpointID) {
 		AbstractInvokable invokable = this.invokable;
 
 		if (executionState == ExecutionState.RUNNING && invokable != null) {
-			if (invokable instanceof CheckpointCommittingOperator) {
+			if (invokable instanceof CheckpointNotificationOperator) {
 
 				// build a local closure 
-				final CheckpointCommittingOperator checkpointer = (CheckpointCommittingOperator) invokable;
+				final CheckpointNotificationOperator checkpointer = (CheckpointNotificationOperator) invokable;
 				final Logger logger = LOG;
 				final String taskName = taskNameWithSubtask;
 
@@ -915,14 +924,15 @@ public class Task implements Runnable {
 					@Override
 					public void run() {
 						try {
-							checkpointer.confirmCheckpoint(checkpointID, state);
+							checkpointer.notifyCheckpointComplete(checkpointID);
 						}
 						catch (Throwable t) {
-							logger.error("Error while confirming checkpoint for " + taskName, t);
+							// fail task if checkpoint confirmation failed.
+							failExternally(new RuntimeException("Error while confirming checkpoint", t));
 						}
 					}
 				};
-				executeAsyncCallRunnable(runnable, "Checkpoint Confirmation");
+				executeAsyncCallRunnable(runnable, "Checkpoint Confirmation for " + taskName);
 			}
 			else {
 				LOG.error("Task received a checkpoint commit notification, but is not a checkpoint committing task - "
@@ -982,7 +992,7 @@ public class Task implements Runnable {
 	private void executeAsyncCallRunnable(Runnable runnable, String callName) {
 		// make sure the executor is initialized. lock against concurrent calls to this function
 		synchronized (this) {
-			if (isCanceledOrFailed()) {
+			if (executionState != ExecutionState.RUNNING) {
 				return;
 			}
 			
@@ -996,7 +1006,7 @@ public class Task implements Runnable {
 				
 				// double-check for execution state, and make sure we clean up after ourselves
 				// if we created the dispatcher while the task was concurrently canceled
-				if (isCanceledOrFailed()) {
+				if (executionState != ExecutionState.RUNNING) {
 					executor.shutdown();
 					asyncCallDispatcher = null;
 					return;
@@ -1009,9 +1019,10 @@ public class Task implements Runnable {
 				executor.submit(runnable);
 			}
 			catch (RejectedExecutionException e) {
-				// may be that we are concurrently canceled. if not, report that something is fishy
-				if (!isCanceledOrFailed()) {
-					throw new RuntimeException("Async call was rejected, even though the task was not canceled.", e);
+				// may be that we are concurrently finished or canceled.
+				// if not, report that something is fishy
+				if (executionState == ExecutionState.RUNNING) {
+					throw new RuntimeException("Async call was rejected, even though the task is running.", e);
 				}
 			}
 		}
@@ -1037,7 +1048,7 @@ public class Task implements Runnable {
 	public String toString() {
 		return getTaskNameWithSubtasks() + " [" + executionState + ']';
 	}
-	
+
 	// ------------------------------------------------------------------------
 	//  Task Names
 	// ------------------------------------------------------------------------

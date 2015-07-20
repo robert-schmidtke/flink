@@ -22,18 +22,19 @@ import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.Map.Entry;
 
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.collections.functors.NotNullPredicate;
+import org.apache.flink.api.common.accumulators.Accumulator;
 import org.apache.flink.api.java.functions.KeySelector;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.configuration.ConfigConstants;
 import org.apache.flink.configuration.GlobalConfiguration;
+import org.apache.flink.runtime.accumulators.AccumulatorRegistry;
 import org.apache.flink.runtime.event.task.TaskEvent;
 import org.apache.flink.runtime.execution.Environment;
 import org.apache.flink.runtime.jobgraph.tasks.AbstractInvokable;
-import org.apache.flink.runtime.jobgraph.tasks.CheckpointCommittingOperator;
+import org.apache.flink.runtime.jobgraph.tasks.CheckpointNotificationOperator;
 import org.apache.flink.runtime.jobgraph.tasks.CheckpointedOperator;
 import org.apache.flink.runtime.jobgraph.tasks.OperatorStateCarrier;
 import org.apache.flink.runtime.state.FileStateHandle;
@@ -41,7 +42,6 @@ import org.apache.flink.runtime.state.LocalStateHandle;
 import org.apache.flink.runtime.state.PartitionedStateHandle;
 import org.apache.flink.runtime.state.StateHandle;
 import org.apache.flink.runtime.state.StateHandleProvider;
-import org.apache.flink.runtime.util.SerializedValue;
 import org.apache.flink.runtime.util.event.EventListener;
 import org.apache.flink.streaming.api.graph.StreamConfig;
 import org.apache.flink.streaming.api.operators.StatefulStreamOperator;
@@ -52,7 +52,7 @@ import org.slf4j.LoggerFactory;
 
 
 public abstract class StreamTask<OUT, O extends StreamOperator<OUT>> extends AbstractInvokable implements
-		OperatorStateCarrier<StateHandle<Serializable>>, CheckpointedOperator, CheckpointCommittingOperator {
+		OperatorStateCarrier<StateHandle<Serializable>>, CheckpointedOperator, CheckpointNotificationOperator {
 
 	private static final Logger LOG = LoggerFactory.getLogger(StreamTask.class);
 
@@ -69,11 +69,11 @@ public abstract class StreamTask<OUT, O extends StreamOperator<OUT>> extends Abs
 	protected volatile boolean isRunning = false;
 
 	protected List<StreamingRuntimeContext> contexts;
-	
+
 	protected StreamingRuntimeContext headContext;
 
 	protected ClassLoader userClassLoader;
-	
+
 	private EventListener<TaskEvent> superstepListener;
 
 	public StreamTask() {
@@ -86,16 +86,22 @@ public abstract class StreamTask<OUT, O extends StreamOperator<OUT>> extends Abs
 	public void registerInputOutput() {
 		this.userClassLoader = getUserCodeClassLoader();
 		this.configuration = new StreamConfig(getTaskConfiguration());
-		
+
 		streamOperator = configuration.getStreamOperator(userClassLoader);
 
-		outputHandler = new OutputHandler<OUT>(this);
-		
+		// Create and register Accumulators
+		Environment env = getEnvironment();
+		AccumulatorRegistry accumulatorRegistry = env.getAccumulatorRegistry();
+		Map<String, Accumulator<?, ?>> accumulatorMap = accumulatorRegistry.getUserMap();
+		AccumulatorRegistry.Reporter reporter = accumulatorRegistry.getReadWriteReporter();
+
+		outputHandler = new OutputHandler<OUT>(this, accumulatorMap, reporter);
+
 		if (streamOperator != null) {
 			// IterationHead and IterationTail don't have an Operator...
 
 			//Create context of the head operator
-			headContext = createRuntimeContext(configuration);
+			headContext = createRuntimeContext(configuration, accumulatorMap);
 			this.contexts.add(headContext);
 			streamOperator.setup(outputHandler.getOutput(), headContext);
 		}
@@ -107,16 +113,16 @@ public abstract class StreamTask<OUT, O extends StreamOperator<OUT>> extends Abs
 		return getEnvironment().getTaskName();
 	}
 
-	public StreamingRuntimeContext createRuntimeContext(StreamConfig conf) {
+	public StreamingRuntimeContext createRuntimeContext(StreamConfig conf, Map<String, Accumulator<?,?>> accumulatorMap) {
 		Environment env = getEnvironment();
 		String operatorName = conf.getStreamOperator(userClassLoader).getClass().getSimpleName();
-		
+
 		KeySelector<?,Serializable> statePartitioner = conf.getStatePartitioner(userClassLoader);
-		
+
 		return new StreamingRuntimeContext(operatorName, env, getUserCodeClassLoader(),
-				getExecutionConfig(), statePartitioner, getStateHandleProvider());
+				getExecutionConfig(), statePartitioner, getStateHandleProvider(), accumulatorMap);
 	}
-	
+
 	private StateHandleProvider<Serializable> getStateHandleProvider() {
 
 		StateHandleProvider<Serializable> provider = configuration
@@ -134,7 +140,7 @@ public abstract class StreamTask<OUT, O extends StreamOperator<OUT>> extends Abs
 			} catch (Exception e) {
 				throw new RuntimeException(backendName + " is not a valid state backend.\nSupported backends: jobmanager, filesystem.");
 			}
-			
+
 			switch (backend) {
 				case JOBMANAGER:
 					LOG.info("State backend for state checkpoints is set to jobmanager.");
@@ -152,7 +158,7 @@ public abstract class StreamTask<OUT, O extends StreamOperator<OUT>> extends Abs
 				default:
 					throw new RuntimeException("Backend " + backend + " is not supported yet.");
 			}
-			
+
 		} else {
 			LOG.info("Using user defined state backend for streaming checkpoitns.");
 			return provider;
@@ -199,7 +205,7 @@ public abstract class StreamTask<OUT, O extends StreamOperator<OUT>> extends Abs
 	@SuppressWarnings("unchecked")
 	@Override
 	public void setInitialState(StateHandle<Serializable> stateHandle) throws Exception {
-		
+
 		// We retrieve end restore the states for the chained oeprators.
 		List<Tuple2<StateHandle<Serializable>, Map<String, PartitionedStateHandle>>> chainedStates = (List<Tuple2<StateHandle<Serializable>, Map<String, PartitionedStateHandle>>>) stateHandle.getState();
 
@@ -217,15 +223,15 @@ public abstract class StreamTask<OUT, O extends StreamOperator<OUT>> extends Abs
 
 	@Override
 	public void triggerCheckpoint(long checkpointId, long timestamp) throws Exception {
-		
+
 		synchronized (checkpointLock) {
 			if (isRunning) {
 				try {
 					LOG.debug("Starting checkpoint {} on task {}", checkpointId, getName());
-					
+
 					// We wrap the states of the chained operators in a list, marking non-stateful oeprators with null
 					List<Tuple2<StateHandle<Serializable>, Map<String, PartitionedStateHandle>>> chainedStates = new ArrayList<Tuple2<StateHandle<Serializable>, Map<String, PartitionedStateHandle>>>();
-					
+
 					// A wrapper handle is created for the List of statehandles
 					WrapperStateHandle stateHandle;
 					try {
@@ -240,17 +246,17 @@ public abstract class StreamTask<OUT, O extends StreamOperator<OUT>> extends Abs
 								chainedStates.add(null);
 							}
 						}
-						
+
 						stateHandle = CollectionUtils.exists(chainedStates,
 								NotNullPredicate.INSTANCE) ? new WrapperStateHandle(chainedStates) : null;
 					}
 					catch (Exception e) {
 						throw new Exception("Error while drawing snapshot of the user state.", e);
 					}
-			
+
 					// now emit the checkpoint barriers
 					outputHandler.broadcastBarrier(checkpointId, timestamp);
-					
+
 					// now confirm the checkpoint
 					if (stateHandle == null) {
 						getEnvironment().acknowledgeCheckpoint(checkpointId);
@@ -270,44 +276,24 @@ public abstract class StreamTask<OUT, O extends StreamOperator<OUT>> extends Abs
 
 	@SuppressWarnings({ "unchecked", "rawtypes" })
 	@Override
-	public void confirmCheckpoint(long checkpointId, SerializedValue<StateHandle<?>> stateHandle) throws Exception {
+	public void notifyCheckpointComplete(long checkpointId) throws Exception {
+		// we do nothing here so far. this should call commit on the source function, for example
 		synchronized (checkpointLock) {
-			if (stateHandle != null) {
-				List<Tuple2<StateHandle<Serializable>, Map<String, PartitionedStateHandle>>> chainedStates = (List<Tuple2<StateHandle<Serializable>, Map<String, PartitionedStateHandle>>>) stateHandle
-						.deserializeValue(getUserCodeClassLoader()).getState();
+			if (streamOperator instanceof StatefulStreamOperator) {
+				((StatefulStreamOperator) streamOperator).notifyCheckpointComplete(checkpointId);
+			}
 
-				for (int i = 0; i < chainedStates.size(); i++) {
-					Tuple2<StateHandle<Serializable>, Map<String, PartitionedStateHandle>> chainedState = chainedStates
-							.get(i);
-					StreamOperator<?> chainedOperator = outputHandler.getChainedOperators().get(i);
-
-					if (chainedState != null) {
-						if (chainedState.f0 != null) {
-							((StatefulStreamOperator) chainedOperator).confirmCheckpointCompleted(
-									checkpointId, null, chainedState.f0);
-						}
-
-						if (chainedState.f1 != null) {
-							if (chainedOperator instanceof StatefulStreamOperator) {
-								for (Entry<String, PartitionedStateHandle> stateEntry : chainedState.f1
-										.entrySet()) {
-									for (StateHandle<Serializable> handle : stateEntry.getValue()
-											.getState().values()) {
-										((StatefulStreamOperator) chainedOperator)
-												.confirmCheckpointCompleted(checkpointId,
-														stateEntry.getKey(), handle);
-									}
-								}
-							}
-						}
+			if (hasChainedOperators) {
+				for (StreamOperator<?> chainedOperator : outputHandler.getChainedOperators()) {
+					if (chainedOperator instanceof StatefulStreamOperator) {
+						((StatefulStreamOperator) chainedOperator).notifyCheckpointComplete(checkpointId);
 					}
 				}
 			}
-
 		}
 	}
-	
-	
+
+
 	// ------------------------------------------------------------------------
 	//  Utilities
 	// ------------------------------------------------------------------------

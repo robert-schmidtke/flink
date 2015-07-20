@@ -16,27 +16,17 @@
  * limitations under the License.
  */
 
-package org.apache.flink.runtime.jobmanager.accumulators;
+package org.apache.flink.stormcompatibility.util;
 
-import java.util.HashMap;
-import java.util.Map;
+import backtype.storm.tuple.Tuple;
 
-import org.apache.flink.api.common.accumulators.Accumulator;
-import org.apache.flink.api.common.accumulators.AccumulatorHelper;
+public class RawOutputFormatter implements OutputFormatter {
+	private static final long serialVersionUID = 8685668993521259832L;
 
-/**
- * Simple class wrapping a map of accumulators for a single job. Just for better
- * handling.
- */
-public class JobAccumulators {
-
-	private final Map<String, Accumulator<?, ?>> accumulators = new HashMap<String, Accumulator<?, ?>>();
-
-	public Map<String, Accumulator<?, ?>> getAccumulators() {
-		return this.accumulators;
+	@Override
+	public String format(final Tuple input) {
+		assert (input.size() == 1);
+		return input.getValue(0).toString();
 	}
 
-	public void processNew(Map<String, Accumulator<?, ?>> newAccumulators) {
-		AccumulatorHelper.mergeInto(this.accumulators, newAccumulators);
-	}
 }

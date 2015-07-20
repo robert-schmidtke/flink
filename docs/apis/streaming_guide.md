@@ -311,6 +311,25 @@ Usage: `dataStream.broadcast()`
  * *Global*: All data points are directed to the first instance of the operator. 
 Usage: `dataStream.global()`
 
+Custom partitioning can also be used by giving a Partitioner function and a single field key to partition on, similarly to the batch API.
+<div class="codetabs" markdown="1">
+<div data-lang="java" markdown="1">
+{% highlight java %}
+DataStream<Tuple2<String,Integer>> in = // [...]
+DataStream<Tuple2<String,Integer>> result =in
+    .partitionCustom(Partitioner<K> partitioner, key)
+{% endhighlight %}
+</div>
+<div data-lang="scala" markdown="1">
+
+{% highlight scala %}
+val in: DataSet[(Int, String)] = // [...]
+val result = in
+    .partitionCustom(partitioner: Partitioner[K], key)
+{% endhighlight %}
+</div>
+</div>
+
 By default *Forward* partitioning is used. 
 
 Partitioning does not remain in effect after a transformation, so it needs to be set again for subsequent operations.
@@ -1299,6 +1318,9 @@ Some operators might need the information when a checkpoint is fully acknowledge
 Another way of exposing user defined operator state for the Flink runtime for checkpointing is by using the `Checkpointed` interface.
 
 When the user defined function implements the `Checkpointed` interface, the `snapshotState(…)` and `restoreState(…)` methods will be executed to draw and restore function state.
+
+In addition to that, user functions can also implement the `CheckpointNotifier` interface to receive notifications on completed checkpoints via the `notifyCheckpointComplete(long checkpointId)` method.
+Note that there is no guarantee for the user function to receive a notification if a failure happens between checkpoint completion and notification. The notifications should hence be treated in a way that notifications from later checkpoints can subsume missing notifications.
 
 For example the same counting, reduce function shown for `OperatorState`s by using the `Checkpointed` interface instead:
 

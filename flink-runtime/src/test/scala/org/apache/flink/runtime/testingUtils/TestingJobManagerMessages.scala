@@ -20,8 +20,12 @@ package org.apache.flink.runtime.testingUtils
 
 import akka.actor.ActorRef
 import org.apache.flink.api.common.JobID
-import org.apache.flink.runtime.executiongraph.ExecutionGraph
+import org.apache.flink.runtime.accumulators.AccumulatorRegistry
+import org.apache.flink.runtime.executiongraph.{ExecutionAttemptID, ExecutionGraph}
+import org.apache.flink.runtime.instance.InstanceGateway
 import org.apache.flink.runtime.jobgraph.JobStatus
+import java.util.Map
+import org.apache.flink.api.common.accumulators.Accumulator
 
 object TestingJobManagerMessages {
 
@@ -43,7 +47,7 @@ object TestingJobManagerMessages {
   case class NotifyWhenJobRemoved(jobID: JobID)
 
   case class RequestWorkingTaskManager(jobID: JobID)
-  case class WorkingTaskManager(taskManager: ActorRef)
+  case class WorkingTaskManager(gatewayOption: Option[InstanceGateway])
 
   case class NotifyWhenJobStatus(jobID: JobID, state: JobStatus)
   case class JobStatusIs(jobID: JobID, state: JobStatus)
@@ -52,4 +56,9 @@ object TestingJobManagerMessages {
 
   case class NotifyWhenTaskManagerTerminated(taskManager: ActorRef)
   case class TaskManagerTerminated(taskManager: ActorRef)
+
+  case class RequestAccumulatorValues(jobID: JobID)
+  case class RequestAccumulatorValuesResponse(jobID: JobID,
+    flinkAccumulators: Map[ExecutionAttemptID, Map[AccumulatorRegistry.Metric, Accumulator[_,_]]],
+    userAccumulators: Map[String, Accumulator[_,_]])
 }
