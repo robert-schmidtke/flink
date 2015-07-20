@@ -336,7 +336,7 @@ public abstract class DelimitedInputFormat<OT> extends FileInputFormat<OT> {
 			// make sure that the sampling times out after a while if the file system does not answer in time
 			this.openTimeout = 10000;
 			// set a small read buffer size
-			this.bufferSize = 8 * 1024;
+			this.bufferSize = 4 * 1024;
 			// prevent overly large records, for example if we have an incorrectly configured delimiter
 			this.lineLengthLimit = MAX_SAMPLE_LEN;
 			
