@@ -180,12 +180,12 @@ public final class LocatableInputSplitAssigner implements InputSplitAssigner {
 						throw new IllegalStateException("Chosen InputSplit has already been assigned. This should not happen!");
 					}
 				}
+				
+				if (assignLocallyOnly) {
+					LOG.info("Found no local assignment, returning null because remote splits are not to be assigned.");
+					return null;
+				}
 			}
-		}
-		
-		if (assignLocallyOnly) {
-			LOG.info("Found no local assignment, returning null because remote splits are not to be assigned.");
-			return null;
 		}
 		
 		// we did not find a local split, return a remote split
