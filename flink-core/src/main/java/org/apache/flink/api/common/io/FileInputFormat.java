@@ -423,7 +423,7 @@ public abstract class FileInputFormat<OT> implements InputFormat<OT, FileInputSp
 
 	@Override
 	public LocatableInputSplitAssigner getInputSplitAssigner(FileInputSplit[] splits) {
-		LOG.info("Getting input split assigner for " + splits.length + " splits");
+		LOG.info("Getting input split assigner for " + splits.length + " splits (local only: " + assignLocallyOnly + ")");
 		LocatableInputSplitAssigner splitAssigner = new LocatableInputSplitAssigner(splits);
 		splitAssigner.setAssignLocallyOnly(assignLocallyOnly);
 		return splitAssigner;
