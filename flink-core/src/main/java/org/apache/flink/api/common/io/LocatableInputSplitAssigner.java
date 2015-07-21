@@ -51,6 +51,8 @@ public final class LocatableInputSplitAssigner implements InputSplitAssigner {
 	private int localAssignments;		// lock protected by the unassigned set lock
 
 	private int remoteAssignments;		// lock protected by the unassigned set lock
+	
+	private boolean assignLocallyOnly;
 
 	// --------------------------------------------------------------------------------------------
 
@@ -181,35 +183,37 @@ public final class LocatableInputSplitAssigner implements InputSplitAssigner {
 			}
 		}
 		
-		LOG.info("No local split for {}, returning null.", host);
-		return null;
+		if (assignLocallyOnly) {
+			LOG.info("Found no local assignment, returning null because remote splits are not to be assigned.");
+			return null;
+		}
 		
 		// we did not find a local split, return a remote split
-//		synchronized (this.remoteSplitChooser) {
-//			synchronized (this.unassigned) {
-//				LocatableInputSplitWithCount split = this.remoteSplitChooser.getNextUnassignedMinLocalCountSplit(this.unassigned);
-//
-//				if (split != null) {
-//					// found a valid split. Double check that it hasn't been assigned yet.
-//					if (this.unassigned.remove(split)) {
-//						if (LOG.isInfoEnabled()) {
-//							LOG.info("Assigning remote split[{}] to host {}", split.getSplit().getSplitNumber(), host);
-//						}
-//
-//						remoteAssignments++;
-//						return split.getSplit();
-//					} else {
-//						throw new IllegalStateException("Chosen InputSplit has already been assigned. This should not happen!");
-//					}
-//				} else {
-//					// all splits consumed
-//					if (LOG.isDebugEnabled()) {
-//						LOG.debug("No more input splits remaining.");
-//					}
-//					return null;
-//				}
-//			}
-//		}
+		synchronized (this.remoteSplitChooser) {
+			synchronized (this.unassigned) {
+				LocatableInputSplitWithCount split = this.remoteSplitChooser.getNextUnassignedMinLocalCountSplit(this.unassigned);
+
+				if (split != null) {
+					// found a valid split. Double check that it hasn't been assigned yet.
+					if (this.unassigned.remove(split)) {
+						if (LOG.isInfoEnabled()) {
+							LOG.info("Assigning remote split[{}] to host {}", split.getSplit().getSplitNumber(), host);
+						}
+
+						remoteAssignments++;
+						return split.getSplit();
+					} else {
+						throw new IllegalStateException("Chosen InputSplit has already been assigned. This should not happen!");
+					}
+				} else {
+					// all splits consumed
+					if (LOG.isDebugEnabled()) {
+						LOG.debug("No more input splits remaining.");
+					}
+					return null;
+				}
+			}
+		}
 	}
 
 	private static final boolean isLocal(String flinkHost, String[] hosts) {
@@ -232,6 +236,10 @@ public final class LocatableInputSplitAssigner implements InputSplitAssigner {
 
 	public int getNumberOfRemoteAssignments() {
 		return remoteAssignments;
+	}
+	
+	public void setAssignLocallyOnly(boolean assignLocallyOnly) {
+		this.assignLocallyOnly = assignLocallyOnly;
 	}
 
 	/**

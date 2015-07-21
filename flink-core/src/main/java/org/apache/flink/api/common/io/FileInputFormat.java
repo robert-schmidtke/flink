@@ -216,6 +216,11 @@ public abstract class FileInputFormat<OT> implements InputFormat<OT, FileInputSp
 	 */
 	protected boolean enumerateNestedFiles = false;
 	
+	/**
+	 * The flag to specify whether only local splits should be assigned.
+	 */
+	protected boolean assignLocallyOnly = false;
+	
 	// --------------------------------------------------------------------------------------------
 	//  Constructors
 	// --------------------------------------------------------------------------------------------	
@@ -346,6 +351,7 @@ public abstract class FileInputFormat<OT> implements InputFormat<OT, FileInputSp
 		}
 		
 		this.enumerateNestedFiles = parameters.getBoolean(ENUMERATE_NESTED_FILES_FLAG, false);
+		this.assignLocallyOnly = parameters.getBoolean(ASSIGN_LOCALLY_ONLY_FLAG, false);
 	}
 	
 	/**
@@ -418,7 +424,9 @@ public abstract class FileInputFormat<OT> implements InputFormat<OT, FileInputSp
 	@Override
 	public LocatableInputSplitAssigner getInputSplitAssigner(FileInputSplit[] splits) {
 		LOG.info("Getting input split assigner for " + splits.length + " splits");
-		return new LocatableInputSplitAssigner(splits);
+		LocatableInputSplitAssigner splitAssigner = new LocatableInputSplitAssigner(splits);
+		splitAssigner.setAssignLocallyOnly(assignLocallyOnly);
+		return splitAssigner;
 	}
 
 	/**
@@ -938,6 +946,11 @@ public abstract class FileInputFormat<OT> implements InputFormat<OT, FileInputSp
 	 * The config parameter which defines whether input directories are recursively traversed.
 	 */
 	public static final String ENUMERATE_NESTED_FILES_FLAG = "recursive.file.enumeration";
+	
+	/**
+	 * The config parameter which defines whether input splits should only be assigned locally.
+	 */
+	public static final String ASSIGN_LOCALLY_ONLY_FLAG = "assignments.localonly";
 	
 	
 	// ----------------------------------- Config Builder -----------------------------------------
