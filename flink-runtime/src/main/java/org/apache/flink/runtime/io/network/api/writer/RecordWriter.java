@@ -50,12 +50,6 @@ public class RecordWriter<T extends IOReadableWritable> {
 
 	private final int numChannels;
 
-	/**
-	 * Counter for the number of records emitted and for the number of bytes written.
-	 * @param counter
-	 */
-	private AccumulatorRegistry.Reporter reporter;
-
 	/** {@link RecordSerializer} per outgoing channel */
 	private final RecordSerializer<T>[] serializers;
 
@@ -88,7 +82,6 @@ public class RecordWriter<T extends IOReadableWritable> {
 
 			synchronized (serializer) {
 				SerializationResult result = serializer.addRecord(record);
-
 				while (result.isFullBuffer()) {
 					Buffer buffer = serializer.getCurrentBuffer();
 
@@ -98,17 +91,33 @@ public class RecordWriter<T extends IOReadableWritable> {
 					}
 
 					buffer = writer.getBufferProvider().requestBufferBlocking();
-					if (reporter != null) {
-						// increase the number of written bytes by the memory segment's size
-						reporter.reportNumBytesOut(buffer.getSize());
-					}
-
 					result = serializer.setNextBuffer(buffer);
 				}
+			}
+		}
+	}
 
-				if(reporter != null) {
-					// count number of emitted records
-					reporter.reportNumRecordsOut(1);
+	/**
+	 * This is used to broadcast Streaming Watermarks in-band with records. This ignores
+	 * the {@link ChannelSelector}.
+	 */
+	public void broadcastEmit(T record) throws IOException, InterruptedException {
+		for (int targetChannel = 0; targetChannel < numChannels; targetChannel++) {
+			// serialize with corresponding serializer and send full buffer
+			RecordSerializer<T> serializer = serializers[targetChannel];
+
+			synchronized (serializer) {
+				SerializationResult result = serializer.addRecord(record);
+				while (result.isFullBuffer()) {
+					Buffer buffer = serializer.getCurrentBuffer();
+
+					if (buffer != null) {
+						writer.writeBuffer(buffer, targetChannel);
+						serializer.clearCurrentBuffer();
+					}
+
+					buffer = writer.getBufferProvider().requestBufferBlocking();
+					result = serializer.setNextBuffer(buffer);
 				}
 			}
 		}

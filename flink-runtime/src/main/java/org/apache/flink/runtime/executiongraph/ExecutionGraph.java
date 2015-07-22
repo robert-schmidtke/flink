@@ -141,9 +141,10 @@ public class ExecutionGraph implements Serializable {
 	 * @param accumulatorSnapshot The serialized flink and user-defined accumulators
 	 */
 	public void updateAccumulators(AccumulatorSnapshot accumulatorSnapshot) {
-		Map<AccumulatorRegistry.Metric, Accumulator<?, ?>> flinkAccumulators = accumulatorSnapshot.getFlinkAccumulators();
+		Map<AccumulatorRegistry.Metric, Accumulator<?, ?>> flinkAccumulators;
 		Map<String, Accumulator<?, ?>> userAccumulators;
 		try {
+			flinkAccumulators = accumulatorSnapshot.deserializeFlinkAccumulators();
 			userAccumulators = accumulatorSnapshot.deserializeUserAccumulators(userClassLoader);
 
 			ExecutionAttemptID execID = accumulatorSnapshot.getExecutionAttemptID();
@@ -233,6 +234,8 @@ public class ExecutionGraph implements Serializable {
 
 	// ------ Fields that are only relevant for archived execution graphs ------------
 	private ExecutionConfig executionConfig;
+
+	private String jsonPlan;
 
 	// --------------------------------------------------------------------------------------------
 	//   Constructors
@@ -417,6 +420,17 @@ public class ExecutionGraph implements Serializable {
 	 */
 	public List<BlobKey> getRequiredJarFiles() {
 		return this.requiredJarFiles;
+	}
+
+	// --------------------------------------------------------------------------------------------
+
+
+	public void setJsonPlan(String jsonPlan) {
+		this.jsonPlan = jsonPlan;
+	}
+
+	public String getJsonPlan() {
+		return jsonPlan;
 	}
 
 	public Scheduler getScheduler() {
@@ -889,7 +903,7 @@ public class ExecutionGraph implements Serializable {
 					Map<String, Accumulator<?, ?>> userAccumulators = null;
 					try {
 						AccumulatorSnapshot accumulators = state.getAccumulators();
-						flinkAccumulators = accumulators.getFlinkAccumulators();
+						flinkAccumulators = accumulators.deserializeFlinkAccumulators();
 						userAccumulators = accumulators.deserializeUserAccumulators(userClassLoader);
 					} catch (Exception e) {
 						// Exceptions would be thrown in the future here
