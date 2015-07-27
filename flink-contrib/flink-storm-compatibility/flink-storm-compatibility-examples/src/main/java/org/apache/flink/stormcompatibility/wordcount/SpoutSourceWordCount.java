@@ -67,8 +67,8 @@ public class SpoutSourceWordCount {
 		final DataStream<Tuple2<String, Integer>> counts =
 				// split up the lines in pairs (2-tuples) containing: (word,1)
 				text.flatMap(new Tokenizer())
-						// group by the tuple field "0" and sum up tuple field "1"
-						.groupBy(0).sum(1);
+				// group by the tuple field "0" and sum up tuple field "1"
+				.groupBy(0).sum(1);
 
 		// emit result
 		if (fileOutput) {

@@ -18,8 +18,6 @@
 
 package org.apache.flink.runtime.executiongraph;
 
-import akka.actor.ActorRef;
-
 import akka.actor.ActorSystem;
 import org.apache.flink.api.common.ExecutionConfig;
 import org.apache.flink.api.common.accumulators.Accumulator;
@@ -28,9 +26,11 @@ import org.apache.flink.configuration.Configuration;
 import org.apache.flink.runtime.JobException;
 import org.apache.flink.runtime.accumulators.AccumulatorSnapshot;
 import org.apache.flink.runtime.accumulators.AccumulatorRegistry;
+import org.apache.flink.runtime.accumulators.StringifiedAccumulatorResult;
 import org.apache.flink.runtime.blob.BlobKey;
 import org.apache.flink.runtime.checkpoint.CheckpointCoordinator;
 import org.apache.flink.runtime.execution.ExecutionState;
+import org.apache.flink.runtime.instance.ActorGateway;
 import org.apache.flink.runtime.io.network.partition.ResultPartitionID;
 import org.apache.flink.runtime.jobgraph.JobVertex;
 import org.apache.flink.runtime.jobgraph.IntermediateDataSetID;
@@ -49,6 +49,7 @@ import org.apache.flink.util.InstantiationUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import scala.Option;
 import scala.concurrent.ExecutionContext;
 import scala.concurrent.duration.FiniteDuration;
 
@@ -62,6 +63,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
+import java.util.UUID;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -165,10 +167,10 @@ public class ExecutionGraph implements Serializable {
 
 	/** Listeners that receive messages when the entire job switches it status (such as from
 	 * RUNNING to FINISHED) */
-	private final List<ActorRef> jobStatusListenerActors;
+	private final List<ActorGateway> jobStatusListenerActors;
 
 	/** Listeners that receive messages whenever a single task execution changes its status */
-	private final List<ActorRef> executionListenerActors;
+	private final List<ActorGateway> executionListenerActors;
 
 	/** Timestamps (in milliseconds as returned by {@code System.currentTimeMillis()} when
 	 * the execution graph transitioned into a certain state. The index into this array is the
@@ -286,8 +288,8 @@ public class ExecutionGraph implements Serializable {
 		this.verticesInCreationOrder = new ArrayList<ExecutionJobVertex>();
 		this.currentExecutions = new ConcurrentHashMap<ExecutionAttemptID, Execution>();
 
-		this.jobStatusListenerActors  = new CopyOnWriteArrayList<ActorRef>();
-		this.executionListenerActors = new CopyOnWriteArrayList<ActorRef>();
+		this.jobStatusListenerActors  = new CopyOnWriteArrayList<ActorGateway>();
+		this.executionListenerActors = new CopyOnWriteArrayList<ActorGateway>();
 
 		this.stateTimestamps = new long[JobStatus.values().length];
 		this.stateTimestamps[JobStatus.CREATED.ordinal()] = System.currentTimeMillis();
@@ -339,12 +341,14 @@ public class ExecutionGraph implements Serializable {
 		return scheduleMode;
 	}
 
-	public void enableSnaphotCheckpointing(long interval, long checkpointTimeout,
-											List<ExecutionJobVertex> verticesToTrigger,
-											List<ExecutionJobVertex> verticesToWaitFor,
-											List<ExecutionJobVertex> verticesToCommitTo,
-											ActorSystem actorSystem)
-	{
+	public void enableSnapshotCheckpointing(
+			long interval,
+			long checkpointTimeout,
+			List<ExecutionJobVertex> verticesToTrigger,
+			List<ExecutionJobVertex> verticesToWaitFor,
+			List<ExecutionJobVertex> verticesToCommitTo,
+			ActorSystem actorSystem,
+			Option<UUID> leaderSessionID) {
 		// simple sanity checks
 		if (interval < 10 || checkpointTimeout < 10) {
 			throw new IllegalArgumentException();
@@ -362,12 +366,22 @@ public class ExecutionGraph implements Serializable {
 		
 		// create the coordinator that triggers and commits checkpoints and holds the state 
 		snapshotCheckpointsEnabled = true;
-		checkpointCoordinator = new CheckpointCoordinator(jobID, NUMBER_OF_SUCCESSFUL_CHECKPOINTS_TO_RETAIN,
-				checkpointTimeout, tasksToTrigger, tasksToWaitFor, tasksToCommitTo, userClassLoader);
+		checkpointCoordinator = new CheckpointCoordinator(
+				jobID,
+				NUMBER_OF_SUCCESSFUL_CHECKPOINTS_TO_RETAIN,
+				checkpointTimeout,
+				tasksToTrigger,
+				tasksToWaitFor,
+				tasksToCommitTo,
+				userClassLoader);
 		
 		// the periodic checkpoint scheduler is activated and deactivated as a result of
 		// job status changes (running -> on, all other states -> off)
-		registerJobStatusListener(checkpointCoordinator.createJobStatusListener(actorSystem, interval));
+		registerJobStatusListener(
+				checkpointCoordinator.createJobStatusListener(
+						actorSystem,
+						interval,
+						leaderSessionID));
 	}
 	
 	public void disableSnaphotCheckpointing() {
@@ -578,6 +592,34 @@ public class ExecutionGraph implements Serializable {
 		}
 
 		return result;
+	}
+
+	/**
+	 * Returns the a stringified version of the user-defined accumulators.
+	 * @return an Array containing the StringifiedAccumulatorResult objects
+	 */
+	public StringifiedAccumulatorResult[] getAccumulatorResultsStringified() {
+
+		Map<String, Accumulator<?, ?>> accumulatorMap = aggregateUserAccumulators();
+
+		int num = accumulatorMap.size();
+		StringifiedAccumulatorResult[] resultStrings = new StringifiedAccumulatorResult[num];
+
+		int i = 0;
+		for (Map.Entry<String, Accumulator<?, ?>> entry : accumulatorMap.entrySet()) {
+
+			StringifiedAccumulatorResult result;
+			Accumulator<?, ?> value = entry.getValue();
+			if (value != null) {
+				result = new StringifiedAccumulatorResult(entry.getKey(), value.getClass().getSimpleName(), value.toString());
+			} else {
+				result = new StringifiedAccumulatorResult(entry.getKey(), "null", "null");
+			}
+
+			resultStrings[i++] = result;
+		}
+
+		return resultStrings;
 	}
 
 	// --------------------------------------------------------------------------------------------
@@ -969,13 +1011,13 @@ public class ExecutionGraph implements Serializable {
 	//  Listeners & Observers
 	// --------------------------------------------------------------------------------------------
 
-	public void registerJobStatusListener(ActorRef listener) {
+	public void registerJobStatusListener(ActorGateway listener) {
 		if (listener != null) {
 			this.jobStatusListenerActors.add(listener);
 		}
 	}
 
-	public void registerExecutionListener(ActorRef listener) {
+	public void registerExecutionListener(ActorGateway listener) {
 		if (listener != null) {
 			this.executionListenerActors.add(listener);
 		}
@@ -987,8 +1029,8 @@ public class ExecutionGraph implements Serializable {
 			ExecutionGraphMessages.JobStatusChanged message =
 					new ExecutionGraphMessages.JobStatusChanged(jobID, newState, System.currentTimeMillis(), error);
 
-			for (ActorRef listener: jobStatusListenerActors) {
-				listener.tell(message, ActorRef.noSender());
+			for (ActorGateway listener: jobStatusListenerActors) {
+				listener.tell(message);
 			}
 		}
 	}
@@ -1006,8 +1048,8 @@ public class ExecutionGraph implements Serializable {
 																	executionID, newExecutionState,
 																	System.currentTimeMillis(), message);
 
-			for (ActorRef listener : executionListenerActors) {
-				listener.tell(actorMessage, ActorRef.noSender());
+			for (ActorGateway listener : executionListenerActors) {
+				listener.tell(actorMessage);
 			}
 		}
 
