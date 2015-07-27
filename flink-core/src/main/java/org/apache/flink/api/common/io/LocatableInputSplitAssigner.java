@@ -106,12 +106,12 @@ public final class LocatableInputSplitAssigner implements InputSplitAssigner {
 		}
 
 		host = host.toLowerCase(Locale.US);
-		
+
 		// for any non-null host, we take the list of non-null splits
 		LocatableInputSplitChooser localSplits = this.localPerHost.get(host);
 
 		// if we have no list for this host yet, create one
-		if (localSplits == null) {			
+		if (localSplits == null) {
 			localSplits = new LocatableInputSplitChooser();
 
 			// lock the list, to be sure that others have to wait for that host's local list
@@ -179,7 +179,7 @@ public final class LocatableInputSplitAssigner implements InputSplitAssigner {
 				}
 			}
 		}
-		
+
 		// we did not find a local split, return a remote split
 		synchronized (this.remoteSplitChooser) {
 			synchronized (this.unassigned) {

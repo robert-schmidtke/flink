@@ -518,7 +518,7 @@ public abstract class FileInputFormat<OT> implements InputFormat<OT, FileInputSp
 				// get the block locations and make sure they are in order with respect to their offset
 				final BlockLocation[] blocks = fs.getFileBlockLocations(file, 0, len);
 				Arrays.sort(blocks);
-				
+
 				long bytesUnassigned = len;
 				long position = 0;
 
@@ -674,7 +674,6 @@ public abstract class FileInputFormat<OT> implements InputFormat<OT, FileInputSp
 		if (LOG.isDebugEnabled()) {
 			LOG.debug("Opening input split " + fileSplit.getPath() + " [" + this.splitStart + "," + this.splitLength + "]");
 		}
-		
 		
 		// open the split in an asynchronous thread
 		final InputSplitOpenThread isot = new InputSplitOpenThread(fileSplit, this.openTimeout);
