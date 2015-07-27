@@ -27,13 +27,6 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.SocketAddress;
 import java.util.Enumeration;
-import java.util.Properties;
-
-import javax.naming.Context;
-import javax.naming.NamingException;
-import javax.naming.directory.Attribute;
-import javax.naming.directory.Attributes;
-import javax.naming.directory.InitialDirContext;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -189,9 +182,7 @@ public class NetUtils {
 
 		long currentSleepTime = MIN_SLEEP_TIME;
 		long elapsedTime = 0;
-		
-		LOG.info("Find connecting address for " + targetAddress.toString());
-		
+
 		// loop while there is time left
 		while (elapsedTime < maxWaitMillis) {
 			AddressDetectionState strategy = AddressDetectionState.ADDRESS;
@@ -204,7 +195,6 @@ public class NetUtils {
 			do {
 				InetAddress address = findAddressUsingStrategy(strategy, targetAddress, logging);
 				if (address != null) {
-					LOG.info("Found address: " + address.toString());
 					return address;
 				}
 
@@ -267,36 +257,25 @@ public class NetUtils {
 														boolean logging) throws IOException
 	{
 		final byte[] targetAddressBytes = targetAddress.getAddress().getAddress();
-		
-		LOG.info("Finding address for: " + targetAddress.toString() + " using strategy " + strategy);
 
 		// for each network interface
 		Enumeration<NetworkInterface> e = NetworkInterface.getNetworkInterfaces();
 		while (e.hasMoreElements()) {
 
 			NetworkInterface netInterface = e.nextElement();
-			
-			LOG.info("Looking into network interface " + netInterface.getName() + "/" + netInterface.getDisplayName());
 
 			// for each address of the network interface
 			Enumeration<InetAddress> ee = netInterface.getInetAddresses();
 			while (ee.hasMoreElements()) {
 				InetAddress interfaceAddress = ee.nextElement();
-				
-				LOG.info("Found interface address " + interfaceAddress.toString() + ", " + interfaceAddress.getHostName() + ", " + interfaceAddress.getCanonicalHostName());
-				
+
 				switch (strategy) {
 					case ADDRESS:
 						if (hasCommonPrefix(targetAddressBytes, interfaceAddress.getAddress())) {
-							LOG.info("Target address {} and local address {} share prefix - trying to connect.",
+							LOG.debug("Target address {} and local address {} share prefix - trying to connect.",
 										targetAddress, interfaceAddress);
 
 							if (tryToConnect(interfaceAddress, targetAddress, strategy.getTimeout(), logging)) {
-								try {
-									LOG.info("Reverse lookup: {}", reverseLookup(interfaceAddress.getHostAddress()));
-								} catch (NamingException e1) {
-									LOG.warn("Error during reverse lookup: {}", e1);
-								}
 								return interfaceAddress;
 							}
 						}
@@ -304,7 +283,7 @@ public class NetUtils {
 
 					case FAST_CONNECT:
 					case SLOW_CONNECT:
-						LOG.info("Trying to connect to {} from local address {} with timeout {}",
+						LOG.debug("Trying to connect to {} from local address {} with timeout {}",
 								targetAddress, interfaceAddress, strategy.getTimeout());
 
 						if (tryToConnect(interfaceAddress, targetAddress, strategy.getTimeout(), logging)) {
@@ -314,7 +293,7 @@ public class NetUtils {
 
 					case HEURISTIC:
 						if (LOG.isDebugEnabled()) {
-							LOG.info("Checking address {} using heuristics: linkLocal: {} loopback: {}",
+							LOG.debug("Checking address {} using heuristics: linkLocal: {} loopback: {}",
 									interfaceAddress, interfaceAddress.isLinkLocalAddress(),
 									interfaceAddress.isLoopbackAddress());
 						}
@@ -332,7 +311,6 @@ public class NetUtils {
 			} // end for each address of the interface
 		} // end for each interface
 
-		LOG.info("no success in finding an address");
 		return null;
 	}
 
@@ -383,39 +361,6 @@ public class NetUtils {
 		finally {
 			socket.close();
 		}
-	}
-	
-	/**
-	 * Gets the FQDN for the provided IP address.
-	 * 
-	 * @param ipAddress
-	 * @return
-	 * @throws NamingException 
-	 */
-	private static String reverseLookup(String ipAddress) throws NamingException {
-		/* http://www.captechconsulting.com/blogs/accessing-the-dusty-corners-of-dns-with-java */
-		
-		Properties env = new Properties();
-		env.put(Context.INITIAL_CONTEXT_FACTORY, "com.sun.jndi.dns.DnsContextFactory");
-		InitialDirContext idc = new InitialDirContext(env);
-		
-		// Reverse IP.
-		String[] parts = ipAddress.split("\\.");
-		ipAddress = "";
-		for (int i = parts.length - 1; i >= 0; i--) {
-			ipAddress += parts[i] + ".";
-		}
-		ipAddress += "in-addr.arpa.";
-		
-		String fqdn = "";
-		
-		Attributes attrs = idc.getAttributes(ipAddress, new String[] { "PTR" });
-		Attribute attr = attrs.get("PTR");
-		if (attr != null) {
-			fqdn = (String) attr.get(0);
-		}
-
-		return fqdn;
 	}
 
 	/**

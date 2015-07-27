@@ -107,15 +107,11 @@ public final class LocatableInputSplitAssigner implements InputSplitAssigner {
 
 		host = host.toLowerCase(Locale.US);
 		
-		LOG.info("Next input split for host: " + host + " (we're on " + System.getenv("HOSTNAME") + ")");
-
 		// for any non-null host, we take the list of non-null splits
 		LocatableInputSplitChooser localSplits = this.localPerHost.get(host);
 
 		// if we have no list for this host yet, create one
-		if (localSplits == null) {
-			LOG.info("No local splits");
-			
+		if (localSplits == null) {			
 			localSplits = new LocatableInputSplitChooser();
 
 			// lock the list, to be sure that others have to wait for that host's local list
@@ -134,9 +130,7 @@ public final class LocatableInputSplitAssigner implements InputSplitAssigner {
 						remaining = this.unassigned.toArray(new LocatableInputSplitWithCount[this.unassigned.size()]);
 					}
 
-					LOG.info("Got " + remaining.length + " remaining splits with count");
 					for (LocatableInputSplitWithCount isw : remaining) {
-						// LOG.info("isLocal(" + host + ", " + Arrays.toString(isw.getSplit().getHostnames()) + "): " + isLocal(host, isw.getSplit().getHostnames()));
 						if (isLocal(host, isw.getSplit().getHostnames())) {
 							// Split is local on host.
 							// Increment local count
@@ -153,10 +147,6 @@ public final class LocatableInputSplitAssigner implements InputSplitAssigner {
 				}
 			}
 		}
-		
-		LOG.info("Got " + localSplits.splits.size() + " local splits for " + host);
-		// LOG.info("Hosts " + Arrays.toString(localPerHost.keySet().toArray(new String[localPerHost.keySet().size()])));
-
 
 		// at this point, we have a list of local splits (possibly empty)
 		// we need to make sure no one else operates in the current list (that protects against
@@ -182,7 +172,9 @@ public final class LocatableInputSplitAssigner implements InputSplitAssigner {
 				}
 				
 				if (assignLocallyOnly) {
-					LOG.info("Found no local assignment, returning null because remote splits are not to be assigned.");
+					if (LOG.isInfoEnabled()) {
+						LOG.info("Found no local assignment, returning null because remote splits are not to be assigned.");
+					}
 					return null;
 				}
 			}
@@ -221,7 +213,6 @@ public final class LocatableInputSplitAssigner implements InputSplitAssigner {
 			return false;
 		}
 		for (String h : hosts) {
-			// LOG.info("NetUtils.getHostnameFromFQDN(" + h.toLowerCase() + "): " + NetUtils.getHostnameFromFQDN(h.toLowerCase()) + " vs. " + flinkHost);
 			if (h != null && NetUtils.getHostnameFromFQDN(h.toLowerCase()).equals(flinkHost)) {
 				return true;
 			}

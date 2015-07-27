@@ -21,6 +21,8 @@ package org.apache.flink.api.common.io;
 import java.io.IOException;
 import java.util.ArrayList;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.apache.flink.api.common.io.statistics.BaseStatistics;
 import org.apache.flink.api.common.operators.base.FileDataSourceBase;
 import org.apache.flink.configuration.ConfigConstants;
@@ -30,8 +32,6 @@ import org.apache.flink.core.fs.FileInputSplit;
 import org.apache.flink.core.fs.FileStatus;
 import org.apache.flink.core.fs.FileSystem;
 import org.apache.flink.core.fs.Path;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import com.google.common.base.Charsets;
 
@@ -139,8 +139,6 @@ public abstract class DelimitedInputFormat<OT> extends FileInputFormat<OT> {
 	private transient boolean overLimit;
 
 	private transient boolean end;
-	
-	private transient int numRecords;
 	
 	
 	// --------------------------------------------------------------------------------------------
@@ -411,11 +409,7 @@ public abstract class DelimitedInputFormat<OT> extends FileInputFormat<OT> {
 	public void open(FileInputSplit split) throws IOException {
 		super.open(split);
 		
-		LOG.info("Opening split {}[{}] on host {}", split.getPath().getName(), split.getSplitNumber(), System.getenv("HOSTNAME"));
-		LOG.info("Delimiter length: {}", this.delimiter.length);
-		
-		this.bufferSize = this.bufferSize <= 0 ?  DEFAULT_READ_BUFFER_SIZE : this.bufferSize;
-		LOG.info("Setting bufferSize to {}", this.bufferSize);
+		this.bufferSize = this.bufferSize <= 0 ? DEFAULT_READ_BUFFER_SIZE : this.bufferSize;
 		
 		if (this.readBuffer == null || this.readBuffer.length != this.bufferSize) {
 			this.readBuffer = new byte[this.bufferSize];
@@ -428,9 +422,6 @@ public abstract class DelimitedInputFormat<OT> extends FileInputFormat<OT> {
 		this.limit = 0;
 		this.overLimit = false;
 		this.end = false;
-		this.numRecords = 0;
-		
-		LOG.info("Split start: {} and length: {}", this.splitStart, this.splitLength);
 
 		if (this.splitStart != 0) {
 			this.stream.seek(this.splitStart);
@@ -459,10 +450,8 @@ public abstract class DelimitedInputFormat<OT> extends FileInputFormat<OT> {
 	@Override
 	public OT nextRecord(OT record) throws IOException {
 		if (readLine()) {
-			++this.numRecords;
 			return readRecord(record, this.currBuffer, this.currOffset, this.currLen);
 		} else {
-			LOG.info("Read {} records", this.numRecords);
 			this.end = true;
 			return null;
 		}
@@ -483,8 +472,6 @@ public abstract class DelimitedInputFormat<OT> extends FileInputFormat<OT> {
 	// --------------------------------------------------------------------------------------------
 
 	protected final boolean readLine() throws IOException {
-		// LOG.info("readline");
-		
 		if (this.stream == null || this.overLimit) {
 			return false;
 		}
@@ -570,7 +557,6 @@ public abstract class DelimitedInputFormat<OT> extends FileInputFormat<OT> {
 	}
 
 	private boolean fillBuffer() throws IOException {
-		LOG.info("Filling buffer");
 		// special case for reading the whole split.
 		if (this.splitLength == FileInputFormat.READ_WHOLE_SPLIT_FLAG) {
 			int read = this.stream.read(this.readBuffer, 0, readBuffer.length);
@@ -584,6 +570,7 @@ public abstract class DelimitedInputFormat<OT> extends FileInputFormat<OT> {
 				return true;
 			}
 		}
+		
 		// else ..
 		int toRead;
 		if (this.splitLength > 0) {
@@ -599,12 +586,8 @@ public abstract class DelimitedInputFormat<OT> extends FileInputFormat<OT> {
 			toRead = this.readBuffer.length;
 			this.overLimit = true;
 		}
-		
-		LOG.info("splitLength: {}, readBuffer.length: {}, toRead: {}", this.splitLength, this.readBuffer.length, toRead);
 
 		int read = this.stream.read(this.readBuffer, 0, toRead);
-		
-		LOG.info("read: {}", read);
 
 		if (read == -1) {
 			this.stream.close();

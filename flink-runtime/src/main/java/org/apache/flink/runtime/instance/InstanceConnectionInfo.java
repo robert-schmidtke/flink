@@ -84,8 +84,6 @@ public class InstanceConnectionInfo implements IOReadableWritable, Comparable<In
 		this.dataPort = dataPort;
 		this.inetAddress = inetAddress;
 		
-		LOG.info("Address {}, Hostname {}, canonical hostname {}", this.inetAddress.getHostAddress(), this.inetAddress.getHostName(), this.inetAddress.getCanonicalHostName());
-		
 		// get FQDN hostname on this TaskManager.
 		try {
 			this.fqdnHostName = this.inetAddress.getCanonicalHostName();
@@ -109,9 +107,6 @@ public class InstanceConnectionInfo implements IOReadableWritable, Comparable<In
 		else {
 			this.hostName = NetUtils.getHostnameFromFQDN(this.fqdnHostName);
 		}
-		
-		LOG.info("this.hostName = {}, this.fqdnHostName = {}", this.hostName, this.fqdnHostName);
-
 	}
 
 	/**

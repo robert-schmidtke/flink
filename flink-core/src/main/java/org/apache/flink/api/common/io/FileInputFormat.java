@@ -423,7 +423,6 @@ public abstract class FileInputFormat<OT> implements InputFormat<OT, FileInputSp
 
 	@Override
 	public LocatableInputSplitAssigner getInputSplitAssigner(FileInputSplit[] splits) {
-		LOG.info("Getting input split assigner for " + splits.length + " splits (local only: " + assignLocallyOnly + ")");
 		LocatableInputSplitAssigner splitAssigner = new LocatableInputSplitAssigner(splits);
 		splitAssigner.setAssignLocallyOnly(assignLocallyOnly);
 		return splitAssigner;
@@ -456,7 +455,6 @@ public abstract class FileInputFormat<OT> implements InputFormat<OT, FileInputSp
 		long totalLength = 0;
 
 		final FileSystem fs = path.getFileSystem();
-		LOG.info("Filesystem: " + fs.getUri().toString());
 		final FileStatus pathFile = fs.getFileStatus(path);
 
 		if (pathFile.isDir()) {
@@ -469,11 +467,9 @@ public abstract class FileInputFormat<OT> implements InputFormat<OT, FileInputSp
 		}
 		// returns if unsplittable
 		if(unsplittable) {
-			LOG.info(path.getName() + ": unsplittable");
 			int splitNum = 0;
 			for (final FileStatus file : files) {
 				final BlockLocation[] blocks = fs.getFileBlockLocations(file, 0, file.getLen());
-				LOG.info("Got " + blocks.length + " blocks for " + file.getPath().getName());
 				Set<String> hosts = new HashSet<String>();
 				for(BlockLocation block : blocks) {
 					hosts.addAll(Arrays.asList(block.getHosts()));
@@ -487,8 +483,6 @@ public abstract class FileInputFormat<OT> implements InputFormat<OT, FileInputSp
 				inputSplits.add(fis);
 			}
 			return inputSplits.toArray(new FileInputSplit[inputSplits.size()]);
-		} else {
-			LOG.info(path.getName() + ": splittable");
 		}
 		
 
@@ -525,8 +519,6 @@ public abstract class FileInputFormat<OT> implements InputFormat<OT, FileInputSp
 				final BlockLocation[] blocks = fs.getFileBlockLocations(file, 0, len);
 				Arrays.sort(blocks);
 				
-				LOG.info("Got " + blocks.length + " blocks for " + file.getPath().getName() + " (len > 0)");
-
 				long bytesUnassigned = len;
 				long position = 0;
 
@@ -538,8 +530,6 @@ public abstract class FileInputFormat<OT> implements InputFormat<OT, FileInputSp
 					// create a new split
 					FileInputSplit fis = new FileInputSplit(splitNum++, file.getPath(), position, splitSize,
 						blocks[blockIndex].getHosts());
-					LOG.info("Hosts for " + file.getPath().getName() + "[" + blockIndex + "] (" + position + "/" + splitSize + "): " +
-						Arrays.toString(blocks[blockIndex].getHosts()));
 					inputSplits.add(fis);
 
 					// adjust the positions
@@ -552,14 +542,11 @@ public abstract class FileInputFormat<OT> implements InputFormat<OT, FileInputSp
 					blockIndex = getBlockIndexForPosition(blocks, position, halfSplit, blockIndex);
 					final FileInputSplit fis = new FileInputSplit(splitNum++, file.getPath(), position,
 						bytesUnassigned, blocks[blockIndex].getHosts());
-					LOG.info("Hosts for " + file.getPath().getName() + "[" + blockIndex + "] (" + position + "/" + splitSize + "): " +
-							Arrays.toString(blocks[blockIndex].getHosts()));
 					inputSplits.add(fis);
 				}
 			} else {
 				// special case with a file of zero bytes size
 				final BlockLocation[] blocks = fs.getFileBlockLocations(file, 0, 0);
-				LOG.info("Got " + blocks.length + " blocks for " + file.getPath().getName() + " (len <= 0)");
 				String[] hosts;
 				if (blocks.length > 0) {
 					hosts = blocks[0].getHosts();
@@ -571,7 +558,6 @@ public abstract class FileInputFormat<OT> implements InputFormat<OT, FileInputSp
 			}
 		}
 
-		LOG.info("Created " + inputSplits.size() + " input splits");
 		return inputSplits.toArray(new FileInputSplit[inputSplits.size()]);
 	}
 
@@ -689,8 +675,6 @@ public abstract class FileInputFormat<OT> implements InputFormat<OT, FileInputSp
 			LOG.debug("Opening input split " + fileSplit.getPath() + " [" + this.splitStart + "," + this.splitLength + "]");
 		}
 		
-		LOG.info("Opening input split " + fileSplit.getPath() + " [" + this.splitStart + "," + this.splitLength + "]");
-
 		
 		// open the split in an asynchronous thread
 		final InputSplitOpenThread isot = new InputSplitOpenThread(fileSplit, this.openTimeout);
