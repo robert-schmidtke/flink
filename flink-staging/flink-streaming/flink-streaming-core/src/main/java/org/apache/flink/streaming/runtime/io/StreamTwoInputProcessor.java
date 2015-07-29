@@ -21,6 +21,7 @@ package org.apache.flink.streaming.runtime.io;
 import org.apache.flink.api.common.typeutils.TypeSerializer;
 import org.apache.flink.runtime.accumulators.AccumulatorRegistry;
 import org.apache.flink.runtime.event.task.AbstractEvent;
+import org.apache.flink.runtime.io.disk.iomanager.IOManager;
 import org.apache.flink.runtime.io.network.api.reader.AbstractReader;
 import org.apache.flink.runtime.io.network.api.reader.ReaderBase;
 import org.apache.flink.runtime.io.network.api.serialization.RecordDeserializer;
@@ -31,6 +32,7 @@ import org.apache.flink.runtime.io.network.partition.consumer.BufferOrEvent;
 import org.apache.flink.runtime.io.network.partition.consumer.InputGate;
 import org.apache.flink.runtime.plugable.DeserializationDelegate;
 import org.apache.flink.runtime.plugable.NonReusingDeserializationDelegate;
+import org.apache.flink.runtime.util.event.EventListener;
 import org.apache.flink.streaming.api.operators.TwoInputStreamOperator;
 import org.apache.flink.streaming.api.watermark.Watermark;
 import org.apache.flink.streaming.runtime.streamrecord.MultiplexingStreamRecordSerializer;
@@ -64,64 +66,76 @@ public class StreamTwoInputProcessor<IN1, IN2> extends AbstractReader implements
 
 	// We need to keep track of the channel from which a buffer came, so that we can
 	// appropriately map the watermarks to input channels
-	int currentChannel = -1;
+	private int currentChannel = -1;
 
 	private boolean isFinished;
 
-	private final BarrierBuffer barrierBuffer;
+	private final CheckpointBarrierHandler barrierHandler;
 
-	private long[] watermarks1;
+	private final long[] watermarks1;
 	private long lastEmittedWatermark1;
 
-	private long[] watermarks2;
+	private final long[] watermarks2;
 	private long lastEmittedWatermark2;
 
-	private int numInputChannels1;
-	private int numInputChannels2;
+	private final int numInputChannels1;
 
-	private DeserializationDelegate<Object> deserializationDelegate1;
-	private DeserializationDelegate<Object> deserializationDelegate2;
+	private final DeserializationDelegate<Object> deserializationDelegate1;
+	private final DeserializationDelegate<Object> deserializationDelegate2;
 
-	@SuppressWarnings("unchecked")
+	@SuppressWarnings({"unchecked", "rawtypes"})
 	public StreamTwoInputProcessor(
 			Collection<InputGate> inputGates1,
 			Collection<InputGate> inputGates2,
 			TypeSerializer<IN1> inputSerializer1,
 			TypeSerializer<IN2> inputSerializer2,
-			boolean enableWatermarkMultiplexing) {
+			EventListener<CheckpointBarrier> checkpointListener,
+			IOManager ioManager,
+			boolean enableWatermarkMultiplexing) throws IOException {
+		
 		super(InputGateUtil.createInputGate(inputGates1, inputGates2));
 
-		barrierBuffer = new BarrierBuffer(inputGate, this);
-
-		StreamRecordSerializer<IN1> inputRecordSerializer1;
-		if (enableWatermarkMultiplexing) {
-			inputRecordSerializer1 = new MultiplexingStreamRecordSerializer<IN1>(inputSerializer1);
-		} else {
-			inputRecordSerializer1 = new StreamRecordSerializer<IN1>(inputSerializer1);
+		this.barrierHandler = new BarrierBuffer(inputGate, ioManager);
+		if (checkpointListener != null) {
+			this.barrierHandler.registerCheckpointEventHandler(checkpointListener);
 		}
-		this.deserializationDelegate1 = new NonReusingDeserializationDelegate(inputRecordSerializer1);
 
-		StreamRecordSerializer<IN2> inputRecordSerializer2;
+		
 		if (enableWatermarkMultiplexing) {
-			inputRecordSerializer2 = new MultiplexingStreamRecordSerializer<IN2>(inputSerializer2);
-		} else {
-			inputRecordSerializer2 = new StreamRecordSerializer<IN2>(inputSerializer2);
+			MultiplexingStreamRecordSerializer<IN1> ser = new MultiplexingStreamRecordSerializer<IN1>(inputSerializer1);
+			this.deserializationDelegate1 = new NonReusingDeserializationDelegate<Object>(ser);
 		}
-		this.deserializationDelegate2 = new NonReusingDeserializationDelegate(inputRecordSerializer2);
+		else {
+			StreamRecordSerializer<IN1> ser = new StreamRecordSerializer<IN1>(inputSerializer1);
+			this.deserializationDelegate1 = (DeserializationDelegate<Object>)
+					(DeserializationDelegate<?>) new NonReusingDeserializationDelegate<StreamRecord<IN1>>(ser);
+		}
+		
+		if (enableWatermarkMultiplexing) {
+			MultiplexingStreamRecordSerializer<IN2> ser = new MultiplexingStreamRecordSerializer<IN2>(inputSerializer2);
+			this.deserializationDelegate2 = new NonReusingDeserializationDelegate<Object>(ser);
+		}
+		else {
+			StreamRecordSerializer<IN2> ser = new StreamRecordSerializer<IN2>(inputSerializer2);
+			this.deserializationDelegate2 = (DeserializationDelegate<Object>)
+					(DeserializationDelegate<?>) new NonReusingDeserializationDelegate<StreamRecord<IN2>>(ser);
+		}
 
 		// Initialize one deserializer per input channel
-		this.recordDeserializers = new SpillingAdaptiveSpanningRecordDeserializer[inputGate
-				.getNumberOfInputChannels()];
+		this.recordDeserializers = new SpillingAdaptiveSpanningRecordDeserializer[inputGate.getNumberOfInputChannels()];
+		
 		for (int i = 0; i < recordDeserializers.length; i++) {
-			recordDeserializers[i] = new SpillingAdaptiveSpanningRecordDeserializer();
+			recordDeserializers[i] = new SpillingAdaptiveSpanningRecordDeserializer<DeserializationDelegate<Object>>();
 		}
 
 		// determine which unioned channels belong to input 1 and which belong to input 2
-		numInputChannels1 = 0;
+		int numInputChannels1 = 0;
 		for (InputGate gate: inputGates1) {
 			numInputChannels1 += gate.getNumberOfInputChannels();
 		}
-		numInputChannels2 = inputGate.getNumberOfInputChannels() - numInputChannels1;
+		
+		this.numInputChannels1 = numInputChannels1;
+		int numInputChannels2 = inputGate.getNumberOfInputChannels() - numInputChannels1;
 
 		watermarks1 = new long[numInputChannels1];
 		for (int i = 0; i < numInputChannels1; i++) {
@@ -180,32 +194,26 @@ public class StreamTwoInputProcessor<IN1, IN2> extends AbstractReader implements
 				}
 			}
 
-			final BufferOrEvent bufferOrEvent = barrierBuffer.getNextNonBlocked();
+			final BufferOrEvent bufferOrEvent = barrierHandler.getNextNonBlocked();
+			if (bufferOrEvent != null) {
 
-			if (bufferOrEvent.isBuffer()) {
-				currentChannel = bufferOrEvent.getChannelIndex();
-				currentRecordDeserializer = recordDeserializers[currentChannel];
-				currentRecordDeserializer.setNextBuffer(bufferOrEvent.getBuffer());
-
-			} else {
-				// Event received
-				final AbstractEvent event = bufferOrEvent.getEvent();
-
-				if (event instanceof CheckpointBarrier) {
-					barrierBuffer.processBarrier(bufferOrEvent);
+				if (bufferOrEvent.isBuffer()) {
+					currentChannel = bufferOrEvent.getChannelIndex();
+					currentRecordDeserializer = recordDeserializers[currentChannel];
+					currentRecordDeserializer.setNextBuffer(bufferOrEvent.getBuffer());
+	
 				} else {
-					if (handleEvent(event)) {
-						if (inputGate.isFinished()) {
-							if (!barrierBuffer.isEmpty()) {
-								throw new RuntimeException("BarrierBuffer should be empty at this point");
-							}
-							isFinished = true;
-							return false;
-						} else if (hasReachedEndOfSuperstep()) {
-							return false;
-						} // else: More data is coming...
-					}
+					// Event received
+					final AbstractEvent event = bufferOrEvent.getEvent();
+					handleEvent(event);
 				}
+			}
+			else {
+				isFinished = true;
+				if (!barrierHandler.isEmpty()) {
+					throw new IllegalStateException("Trailing data in checkpoint barrier handler.");
+				}
+				return false;
 			}
 		}
 	}
@@ -262,7 +270,8 @@ public class StreamTwoInputProcessor<IN1, IN2> extends AbstractReader implements
 		}
 	}
 
+	@Override
 	public void cleanup() throws IOException {
-		barrierBuffer.cleanup();
+		barrierHandler.cleanup();
 	}
 }
