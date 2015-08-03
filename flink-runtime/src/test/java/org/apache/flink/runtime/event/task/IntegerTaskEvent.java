@@ -16,81 +16,82 @@
  * limitations under the License.
  */
 
+
 package org.apache.flink.runtime.event.task;
 
 import java.io.IOException;
 
 import org.apache.flink.core.memory.DataInputView;
 import org.apache.flink.core.memory.DataOutputView;
-import org.apache.flink.util.StringUtils;
+import org.apache.flink.runtime.event.TaskEvent;
 
 /**
- * This class provides a simple implementation of an event that holds a string value.
+ * This class provides a simple implementation of an event that holds an integer value.
+ * 
  */
-public class StringTaskEvent extends TaskEvent {
+public class IntegerTaskEvent extends TaskEvent {
 
 	/**
-	 * The string encapsulated by this event.
+	 * The integer value transported by this integer task event.
 	 */
-	private String message;
+	private int value = -1;
 
 	/**
-	 * The default constructor implementation. It should only be used for deserialization.
+	 * Default constructor (should only be used for deserialization).
 	 */
-	public StringTaskEvent() {}
-
-	/**
-	 * Constructs a new string task event with the given string message.
-	 * 
-	 * @param message
-	 *        the string message that shall be stored in this event
-	 */
-	public StringTaskEvent(final String message) {
-		this.message = message;
+	public IntegerTaskEvent() {
+		// default constructor implementation.
+		// should only be used for deserialization
 	}
 
 	/**
-	 * Returns the stored string.
+	 * Constructs a new integer task event.
 	 * 
-	 * @return the stored string or <code>null</code> if no string is set
+	 * @param value
+	 *        the integer value to be transported inside this integer task event
 	 */
-	public String getString() {
-		return this.message;
+	public IntegerTaskEvent(final int value) {
+		this.value = value;
+	}
+
+	/**
+	 * Returns the stored integer value.
+	 * 
+	 * @return the stored integer value or <code>-1</code> if no value has been set
+	 */
+	public int getInteger() {
+		return this.value;
 	}
 
 
 	@Override
-	public void write(DataOutputView out) throws IOException {
-		StringUtils.writeNullableString(this.message, out);
+	public void write(final DataOutputView out) throws IOException {
+		out.writeInt(this.value);
 	}
+
 
 	@Override
 	public void read(final DataInputView in) throws IOException {
-		this.message = StringUtils.readNullableString(in);
+		this.value = in.readInt();
 	}
 
 
 	@Override
 	public int hashCode() {
-		if (this.message == null) {
-			return 0;
-		}
 
-		return this.message.hashCode();
+		return this.value;
 	}
 
 
 	@Override
 	public boolean equals(final Object obj) {
-		if (!(obj instanceof StringTaskEvent)) {
+
+		if (!(obj instanceof IntegerTaskEvent)) {
 			return false;
 		}
 
-		final StringTaskEvent ste = (StringTaskEvent) obj;
-		if (this.message == null) {
-			return ste.getString() == null;
-		}
+		final IntegerTaskEvent taskEvent = (IntegerTaskEvent) obj;
 
-		return this.message.equals(ste.getString());
+		return (this.value == taskEvent.getInteger());
 	}
 }

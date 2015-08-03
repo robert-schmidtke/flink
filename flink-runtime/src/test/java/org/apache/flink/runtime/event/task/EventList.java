@@ -16,19 +16,21 @@
  * limitations under the License.
  */
 
-package org.apache.flink.streaming.runtime.io;
 
-import org.apache.flink.core.memory.MemorySegment;
-import org.apache.flink.runtime.io.network.buffer.BufferRecycler;
+package org.apache.flink.runtime.event.task;
+
+import org.apache.flink.runtime.event.AbstractEvent;
+import org.apache.flink.runtime.util.SerializableArrayList;
 
 /**
- * A BufferRecycler that does nothing.
+ * Objects of this class can store and serialize/deserialize {@link org.apache.flink.runtime.event.AbstractEvent}
+ * objects.
+ * 
  */
-public class DummyBufferRecycler implements BufferRecycler {
-	
-	public static final BufferRecycler INSTANCE = new DummyBufferRecycler();
-	
-	
-	@Override
-	public void recycle(MemorySegment memorySegment) {}
+public class EventList extends SerializableArrayList<AbstractEvent> {
+
+	/**
+	 * Generated serial UID.
+	 */
+	private static final long serialVersionUID = 4788250278393432776L;
 }

@@ -16,20 +16,9 @@
  * limitations under the License.
  */
 
-
-package org.apache.flink.runtime.event.task;
-
-import org.apache.flink.runtime.util.SerializableArrayList;
+package org.apache.flink.runtime.event;
 
 /**
- * Objects of this class can store and serialize/deserialize {@link org.apache.flink.runtime.event.task.AbstractEvent}
- * objects.
- * 
+ * Subclasses of this event are recognized as events exchanged by the core runtime.
  */
-public class EventList extends SerializableArrayList<AbstractEvent> {
-
-	/**
-	 * Generated serial UID.
-	 */
-	private static final long serialVersionUID = 4788250278393432776L;
-}
+public abstract class RuntimeEvent extends AbstractEvent {}
