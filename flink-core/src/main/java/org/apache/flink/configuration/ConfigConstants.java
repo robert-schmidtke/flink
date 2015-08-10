@@ -172,18 +172,25 @@ public final class ConfigConstants {
 	 */
 	public static final String TASK_MANAGER_MAX_REGISTRATION_DURATION = "taskmanager.maxRegistrationDuration";
 
+	// --------------------------- Runtime Algorithms -------------------------------
+	
 	/**
 	 * Parameter for the maximum fan for out-of-core algorithms.
 	 * Corresponds to the maximum fan-in for merge-sorts and the maximum fan-out
 	 * for hybrid hash joins. 
 	 */
 	public static final String DEFAULT_SPILLING_MAX_FAN_KEY = "taskmanager.runtime.max-fan";
-
+	
 	/**
 	 * Key for the default spilling threshold. When more than the threshold memory of the sort buffers is full, the
 	 * sorter will start spilling to disk.
 	 */
 	public static final String DEFAULT_SORT_SPILLING_THRESHOLD_KEY = "taskmanager.runtime.sort-spilling-threshold";
+
+	/**
+	 * Parameter to switch hash join bloom filters for spilled partitions on and off.
+	 */
+	public static final String RUNTIME_HASH_JOIN_BLOOM_FILTERS_KEY = "taskmanager.runtime.hashjoin-bloom-filters";
 	
 	/**
 	 * The config parameter defining the timeout for filesystem stream opening.
@@ -537,6 +544,13 @@ public final class ConfigConstants {
 	 * The default task manager's maximum registration duration
 	 */
 	public static final String DEFAULT_TASK_MANAGER_MAX_REGISTRATION_DURATION = "Inf";
+
+	// ------------------------ Runtime Algorithms ------------------------
+	
+	/**
+	 * Default setting for the switch for hash join bloom filters for spilled partitions.
+	 */
+	public static final boolean DEFAULT_RUNTIME_HASH_JOIN_BLOOM_FILTERS = true;
 	
 	/**
 	 * The default value for the maximum spilling fan in/out.
@@ -554,7 +568,6 @@ public final class ConfigConstants {
 	public static final int DEFAULT_FS_STREAM_OPENING_TIMEOUT = 0;
 
 	// ------------------------ YARN Configuration ------------------------
-
 
 	/**
 	 * Minimum amount of Heap memory to subtract from the requested TaskManager size.

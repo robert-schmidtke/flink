@@ -75,6 +75,8 @@ public class RuntimeEnvironment implements Environment {
 
 	private final AccumulatorRegistry accumulatorRegistry;
 
+	private final TaskManagerRuntimeInfo taskManagerInfo;
+
 	// ------------------------------------------------------------------------
 
 	public RuntimeEnvironment(
@@ -91,12 +93,13 @@ public class RuntimeEnvironment implements Environment {
 			MemoryManager memManager,
 			IOManager ioManager,
 			BroadcastVariableManager bcVarManager,
-								AccumulatorRegistry accumulatorRegistry,
+			AccumulatorRegistry accumulatorRegistry,
 			InputSplitProvider splitProvider,
 			Map<String, Future<Path>> distCacheEntries,
 			ResultPartitionWriter[] writers,
 			InputGate[] inputGates,
-			ActorGateway jobManager) {
+			ActorGateway jobManager,
+			TaskManagerRuntimeInfo taskManagerInfo) {
 		
 		checkArgument(parallelism > 0 && subtaskIndex >= 0 && subtaskIndex < parallelism);
 
@@ -119,8 +122,8 @@ public class RuntimeEnvironment implements Environment {
 		this.writers = checkNotNull(writers);
 		this.inputGates = checkNotNull(inputGates);
 		this.jobManager = checkNotNull(jobManager);
+		this.taskManagerInfo = checkNotNull(taskManagerInfo);
 	}
-
 
 	// ------------------------------------------------------------------------
 	
@@ -168,7 +171,12 @@ public class RuntimeEnvironment implements Environment {
 	public Configuration getTaskConfiguration() {
 		return taskConfiguration;
 	}
-	
+
+	@Override
+	public TaskManagerRuntimeInfo getTaskManagerInfo() {
+		return taskManagerInfo;
+	}
+
 	@Override
 	public ClassLoader getUserClassLoader() {
 		return userCodeClassLoader;

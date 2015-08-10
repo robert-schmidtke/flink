@@ -36,7 +36,7 @@ import com.codahale.metrics.jvm.{MemoryUsageGaugeSet, GarbageCollectorMetricSet}
 import com.fasterxml.jackson.databind.ObjectMapper
 import grizzled.slf4j.Logger
 
-import org.apache.flink.configuration.{Configuration, ConfigConstants, GlobalConfiguration, IllegalConfigurationException}
+import org.apache.flink.configuration._
 
 import org.apache.flink.runtime.accumulators.AccumulatorSnapshot
 import org.apache.flink.runtime.messages.checkpoint.{NotifyCheckpointComplete, TriggerCheckpoint, AbstractCheckpointMessage}
@@ -172,6 +172,10 @@ class TaskManager(
   protected var leaderSessionID: Option[UUID] = None
 
   private val currentRegistrationSessionID: UUID = UUID.randomUUID()
+
+  private val runtimeInfo = new TaskManagerRuntimeInfo(
+       connectionInfo.getHostname(),
+       new UnmodifiableConfiguration(config.configuration))
 
   // --------------------------------------------------------------------------
   //  Actor messages and life cycle
@@ -892,7 +896,8 @@ class TaskManager(
         jobManagerGateway,
         config.timeout,
         libCache,
-        fileCache)
+        fileCache,
+        runtimeInfo)
 
       log.info(s"Received task ${task.getTaskNameWithSubtasks}")
 
