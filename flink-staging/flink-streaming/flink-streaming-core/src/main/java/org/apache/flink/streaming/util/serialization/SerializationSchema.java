@@ -19,6 +19,14 @@ package org.apache.flink.streaming.util.serialization;
 
 import java.io.Serializable;
 
+/**
+ * The serialization schema describes how to turn a data object into a different serialized
+ * representation. Most data sinks (for example Apache Kafka) require the data to be handed
+ * to them in a specific format (for example as byte strings).
+ * 
+ * @param <T> The type to be serialized.
+ * @param <R> The serialized representation type.
+ */
 public interface SerializationSchema<T, R> extends Serializable {
 
 	/**
@@ -28,6 +36,5 @@ public interface SerializationSchema<T, R> extends Serializable {
 	 *            The incoming element to be serialized
 	 * @return The serialized element.
 	 */
-	public R serialize(T element);
-
+	R serialize(T element);
 }

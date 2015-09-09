@@ -31,6 +31,7 @@ import org.apache.flink.streaming.api.operators.AbstractStreamOperator;
 import org.apache.flink.streaming.api.operators.OneInputStreamOperator;
 import org.apache.flink.streaming.api.watermark.Watermark;
 import org.apache.flink.streaming.runtime.streamrecord.StreamRecord;
+import org.apache.flink.streaming.util.NoOpSink;
 import org.apache.flink.test.util.ForkableFlinkMiniCluster;
 import org.junit.AfterClass;
 import org.junit.Assert;
@@ -58,12 +59,14 @@ public class TimestampITCase {
 	public static void startCluster() {
 		try {
 			Configuration config = new Configuration();
-			config.setInteger(ConfigConstants.LOCAL_INSTANCE_MANAGER_NUMBER_TASK_MANAGER, NUM_TASK_MANAGERS);
+			config.setInteger(ConfigConstants.LOCAL_NUMBER_TASK_MANAGER, NUM_TASK_MANAGERS);
 			config.setInteger(ConfigConstants.TASK_MANAGER_NUM_TASK_SLOTS, NUM_TASK_SLOTS);
 			config.setString(ConfigConstants.DEFAULT_EXECUTION_RETRY_DELAY_KEY, "0 ms");
 			config.setInteger(ConfigConstants.TASK_MANAGER_MEMORY_SIZE_KEY, 12);
 
 			cluster = new ForkableFlinkMiniCluster(config, false);
+
+			cluster.start();
 		}
 		catch (Exception e) {
 			e.printStackTrace();
@@ -99,7 +102,7 @@ public class TimestampITCase {
 		long initialTime = 0L;
 
 		StreamExecutionEnvironment env = StreamExecutionEnvironment.createRemoteEnvironment(
-				"localhost", cluster.getJobManagerRPCPort());
+				"localhost", cluster.getLeaderRPCPort());
 		env.setParallelism(PARALLELISM);
 		env.getConfig().disableSysoutLogging();
 		env.getConfig().enableTimestamps();
@@ -111,7 +114,8 @@ public class TimestampITCase {
 		source1
 				.map(new IdentityMap())
 				.connect(source2).map(new IdentityCoMap())
-				.transform("Custom Operator", BasicTypeInfo.INT_TYPE_INFO, new CustomOperator());
+				.transform("Custom Operator", BasicTypeInfo.INT_TYPE_INFO, new CustomOperator())
+				.addSink(new NoOpSink<Integer>());
 
 		env.execute();
 
@@ -137,7 +141,7 @@ public class TimestampITCase {
 
 
 		StreamExecutionEnvironment env = StreamExecutionEnvironment.createRemoteEnvironment(
-				"localhost", cluster.getJobManagerRPCPort());
+				"localhost", cluster.getLeaderRPCPort());
 		env.setParallelism(PARALLELISM);
 		env.getConfig().disableSysoutLogging();
 		env.getConfig().enableTimestamps();
@@ -149,7 +153,9 @@ public class TimestampITCase {
 		source1
 				.map(new IdentityMap())
 				.connect(source2).map(new IdentityCoMap())
-				.transform("Custom Operator", BasicTypeInfo.INT_TYPE_INFO, new TimestampCheckingOperator());
+				.transform("Custom Operator", BasicTypeInfo.INT_TYPE_INFO, new TimestampCheckingOperator())
+				.addSink(new NoOpSink<Integer>());
+
 
 		env.execute();
 	}
@@ -163,7 +169,7 @@ public class TimestampITCase {
 
 
 		StreamExecutionEnvironment env = StreamExecutionEnvironment.createRemoteEnvironment(
-				"localhost", cluster.getJobManagerRPCPort());
+				"localhost", cluster.getLeaderRPCPort());
 		env.setParallelism(PARALLELISM);
 		env.getConfig().disableSysoutLogging();
 		Assert.assertEquals("Timestamps are not disabled by default.", false, env.getConfig().areTimestampsEnabled());
@@ -176,7 +182,9 @@ public class TimestampITCase {
 		source1
 				.map(new IdentityMap())
 				.connect(source2).map(new IdentityCoMap())
-				.transform("Custom Operator", BasicTypeInfo.INT_TYPE_INFO, new DisabledTimestampCheckingOperator());
+				.transform("Custom Operator", BasicTypeInfo.INT_TYPE_INFO, new DisabledTimestampCheckingOperator())
+				.addSink(new NoOpSink<Integer>());
+
 
 		env.execute();
 	}
@@ -187,14 +195,15 @@ public class TimestampITCase {
 	 */
 	@Test(expected = ProgramInvocationException.class)
 	public void testEventTimeSourceEmitWithoutTimestamp() throws Exception {
-		StreamExecutionEnvironment env = StreamExecutionEnvironment.createRemoteEnvironment("localhost", cluster.getJobManagerRPCPort());
+		StreamExecutionEnvironment env = StreamExecutionEnvironment.createRemoteEnvironment("localhost", cluster.getLeaderRPCPort());
 		env.setParallelism(PARALLELISM);
 		env.getConfig().disableSysoutLogging();
 
 		DataStream<Integer> source1 = env.addSource(new MyErroneousTimestampSource());
 
 		source1
-				.map(new IdentityMap());
+				.map(new IdentityMap())
+				.addSink(new NoOpSink<Integer>());
 
 		env.execute();
 	}
@@ -205,14 +214,15 @@ public class TimestampITCase {
 	 */
 	@Test(expected = ProgramInvocationException.class)
 	public void testSourceEmitWithTimestamp() throws Exception {
-		StreamExecutionEnvironment env = StreamExecutionEnvironment.createRemoteEnvironment("localhost", cluster.getJobManagerRPCPort());
+		StreamExecutionEnvironment env = StreamExecutionEnvironment.createRemoteEnvironment("localhost", cluster.getLeaderRPCPort());
 		env.setParallelism(PARALLELISM);
 		env.getConfig().disableSysoutLogging();
 
 		DataStream<Integer> source1 = env.addSource(new MyErroneousSource());
 
 		source1
-				.map(new IdentityMap());
+				.map(new IdentityMap())
+				.addSink(new NoOpSink<Integer>());
 
 		env.execute();
 	}
@@ -223,14 +233,15 @@ public class TimestampITCase {
 	 */
 	@Test(expected = ProgramInvocationException.class)
 	public void testSourceEmitWatermark() throws Exception {
-		StreamExecutionEnvironment env = StreamExecutionEnvironment.createRemoteEnvironment("localhost", cluster.getJobManagerRPCPort());
+		StreamExecutionEnvironment env = StreamExecutionEnvironment.createRemoteEnvironment("localhost", cluster.getLeaderRPCPort());
 		env.setParallelism(PARALLELISM);
 		env.getConfig().disableSysoutLogging();
 
 		DataStream<Integer> source1 = env.addSource(new MyErroneousWatermarkSource());
 
 		source1
-				.map(new IdentityMap());
+				.map(new IdentityMap())
+				.addSink(new NoOpSink<Integer>());
 
 		env.execute();
 	}

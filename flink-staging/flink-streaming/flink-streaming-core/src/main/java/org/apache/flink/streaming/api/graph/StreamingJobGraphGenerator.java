@@ -44,8 +44,8 @@ import org.apache.flink.runtime.jobmanager.scheduler.SlotSharingGroup;
 import org.apache.flink.streaming.api.CheckpointingMode;
 import org.apache.flink.streaming.api.operators.StreamOperator;
 import org.apache.flink.streaming.api.operators.StreamOperator.ChainingStrategy;
+import org.apache.flink.streaming.runtime.partitioner.ForwardPartitioner;
 import org.apache.flink.streaming.runtime.partitioner.StreamPartitioner;
-import org.apache.flink.streaming.runtime.partitioner.StreamPartitioner.PartitioningStrategy;
 import org.apache.flink.streaming.runtime.tasks.StreamIterationHead;
 import org.apache.flink.streaming.runtime.tasks.StreamIterationTail;
 import org.apache.flink.util.InstantiationUtil;
@@ -87,8 +87,7 @@ public class StreamingJobGraphGenerator {
 
 		// make sure that all vertices start immediately
 		jobGraph.setScheduleMode(ScheduleMode.ALL);
-		
-		
+
 		init();
 
 		setChaining();
@@ -98,6 +97,8 @@ public class StreamingJobGraphGenerator {
 		setSlotSharing();
 		
 		configureCheckpointing();
+
+		configureExecutionRetries();
 
 		try {
 			InstantiationUtil.writeObjectToConfig(this.streamGraph.getExecutionConfig(), this.jobGraph.getJobConfiguration(), ExecutionConfig.CONFIG_KEY);
@@ -294,11 +295,6 @@ public class StreamingJobGraphGenerator {
 		List<StreamEdge> allOutputs = new ArrayList<StreamEdge>(chainableOutputs);
 		allOutputs.addAll(nonChainableOutputs);
 
-		for (StreamEdge output : allOutputs) {
-			config.setSelectedNames(output.getTargetId(),
-					streamGraph.getStreamEdge(vertexID, output.getTargetId()).getSelectedNames());
-		}
-
 		vertexConfigs.put(vertexID, config);
 	}
 
@@ -316,7 +312,7 @@ public class StreamingJobGraphGenerator {
 		downStreamConfig.setNumberOfInputs(downStreamConfig.getNumberOfInputs() + 1);
 
 		StreamPartitioner<?> partitioner = edge.getPartitioner();
-		if (partitioner.getStrategy() == PartitioningStrategy.FORWARD) {
+		if (partitioner instanceof ForwardPartitioner) {
 			downStreamVertex.connectNewDataSetAsInput(headVertex, DistributionPattern.POINTWISE);
 		} else {
 			downStreamVertex.connectNewDataSetAsInput(headVertex, DistributionPattern.ALL_TO_ALL);
@@ -345,7 +341,7 @@ public class StreamingJobGraphGenerator {
 				&& (headOperator.getChainingStrategy() == ChainingStrategy.HEAD ||
 					headOperator.getChainingStrategy() == ChainingStrategy.ALWAYS ||
 					headOperator.getChainingStrategy() == ChainingStrategy.FORCE_ALWAYS)
-				&& (edge.getPartitioner().getStrategy() == PartitioningStrategy.FORWARD || downStreamVertex
+				&& (edge.getPartitioner() instanceof ForwardPartitioner || downStreamVertex
 						.getParallelism() == 1)
 				&& upStreamVertex.getParallelism() == downStreamVertex.getParallelism()
 				&& (streamGraph.isChainingEnabled() ||
@@ -370,25 +366,22 @@ public class StreamingJobGraphGenerator {
 			}
 		}
 
-		for (StreamLoop loop : streamGraph.getStreamLoops()) {
-			for (Tuple2<StreamNode, StreamNode> pair : loop.getSourceSinkPairs()) {
-				
-				CoLocationGroup ccg = new CoLocationGroup();
-				
-				JobVertex source = jobVertices.get(pair.f0.getId());
-				JobVertex sink = jobVertices.get(pair.f1.getId());
-				
-				ccg.addVertex(source);
-				ccg.addVertex(sink);
-				source.updateCoLocationGroup(ccg);
-				sink.updateCoLocationGroup(ccg);
-			}
+		for (Tuple2<StreamNode, StreamNode> pair : streamGraph.getIterationSourceSinkPairs()) {
 
+			CoLocationGroup ccg = new CoLocationGroup();
+
+			JobVertex source = jobVertices.get(pair.f0.getId());
+			JobVertex sink = jobVertices.get(pair.f1.getId());
+
+			ccg.addVertex(source);
+			ccg.addVertex(sink);
+			source.updateCoLocationGroup(ccg);
+			sink.updateCoLocationGroup(ccg);
 		}
+
 	}
 	
 	private void configureCheckpointing() {
-
 		if (streamGraph.isCheckpointingEnabled()) {
 			long interval = streamGraph.getCheckpointingInterval();
 			if (interval < 1) {
@@ -421,12 +414,21 @@ public class StreamingJobGraphGenerator {
 					triggerVertices, ackVertices, commitVertices, interval);
 			jobGraph.setSnapshotSettings(settings);
 
+			// if the user enabled checkpointing, the default number of exec retries is infinitive.
 			int executionRetries = streamGraph.getExecutionConfig().getNumberOfExecutionRetries();
-			if (executionRetries != -1) {
-				jobGraph.setNumberOfExecutionRetries(executionRetries);
-			} else {
-				jobGraph.setNumberOfExecutionRetries(Integer.MAX_VALUE);
+			if(executionRetries == -1) {
+				streamGraph.getExecutionConfig().setNumberOfExecutionRetries(Integer.MAX_VALUE);
 			}
+		}
+	}
+
+	private void configureExecutionRetries() {
+		int executionRetries = streamGraph.getExecutionConfig().getNumberOfExecutionRetries();
+		if (executionRetries != -1) {
+			jobGraph.setNumberOfExecutionRetries(executionRetries);
+		} else {
+			// if the user didn't configure anything, the number of retries is 0.
+			jobGraph.setNumberOfExecutionRetries(0);
 		}
 	}
 }

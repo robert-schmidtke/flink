@@ -125,9 +125,14 @@ public final class ConfigConstants {
 	public static final String TASK_MANAGER_MEMORY_FRACTION_KEY = "taskmanager.memory.fraction";
 
 	/**
-	 * The key for the config parameter defining whether the memory manager allocates memory lazy.
+	 * The fraction of off-heap memory relative to the heap size.
 	 */
-	public static final String TASK_MANAGER_MEMORY_LAZY_ALLOCATION_KEY = "taskmanager.memory.lazyalloc";
+	public static final String TASK_MANAGER_MEMORY_OFF_HEAP_RATIO_KEY = "taskmanager.memory.off-heap-ratio";
+	
+	/**
+	 * The config parameter defining the memory allocation method (JVM heap or off-heap).
+	*/
+	public static final String TASK_MANAGER_MEMORY_OFF_HEAP_KEY = "taskmanager.memory.off-heap";
 
 	/**
 	 * The config parameter defining the number of buffers used in the network stack. This defines the
@@ -248,6 +253,15 @@ public final class ConfigConstants {
 	 * The default value is 5 (seconds).
 	 */
 	public static final String YARN_HEARTBEAT_DELAY_SECONDS = "yarn.heartbeat-delay";
+
+	/**
+	 * When a Flink job is submitted to YARN, the JobManager's host and the number of available
+	 * processing slots is written into a properties file, so that the Flink client is able
+	 * to pick those details up.
+	 * This configuration parameter allows changing the default location of that file (for example
+	 * for environments sharing a Flink installation between users)
+	 */
+	public static final String YARN_PROPERTIES_FILE_LOCATION = "yarn.properties-file.location";
 
 
 	// ------------------------ Hadoop Configuration ------------------------
@@ -443,6 +457,31 @@ public final class ConfigConstants {
 	
 	public static final String FLINK_JVM_OPTIONS = "env.java.opts";
 
+	// --------------------------- Recovery -----------------------------------
+
+	/** Defines recovery mode used for the cluster execution ("standalone", "zookeeper") */
+	public static final String RECOVERY_MODE = "recovery.mode";
+
+	// --------------------------- ZooKeeper ----------------------------------
+
+	/** ZooKeeper servers. */
+	public static final String ZOOKEEPER_QUORUM_KEY = "ha.zookeeper.quorum";
+
+	/** ZooKeeper root path. */
+	public static final String ZOOKEEPER_DIR_KEY = "ha.zookeeper.dir";
+
+	public static final String ZOOKEEPER_LATCH_PATH = "ha.zookeeper.dir.latch";
+
+	public static final String ZOOKEEPER_LEADER_PATH = "ha.zookeeper.dir.leader";
+
+	public static final String ZOOKEEPER_SESSION_TIMEOUT = "ha.zookeeper.client.session-timeout";
+
+	public static final String ZOOKEEPER_CONNECTION_TIMEOUT = "ha.zookeeper.client.connection-timeout";
+
+	public static final String ZOOKEEPER_RETRY_WAIT = "ha.zookeeper.client.retry-wait";
+
+	public static final String ZOOKEEPER_MAX_RETRY_ATTEMPTS = "ha.zookeeper.client.max-retry-attempts";
+
 	// ------------------------------------------------------------------------
 	//                            Default Values
 	// ------------------------------------------------------------------------
@@ -509,6 +548,11 @@ public final class ConfigConstants {
 	public static final float DEFAULT_MEMORY_MANAGER_MEMORY_FRACTION = 0.7f;
 
 	/**
+	 * The default ratio of heap to off-heap memory, when the TaskManager is started with off-heap memory.
+	 */
+	public static final float DEFAULT_MEMORY_MANAGER_MEMORY_OFF_HEAP_RATIO = 3.0f;
+	
+	/**
 	 * Default number of buffers used in the network stack.
 	 */
 	public static final int DEFAULT_TASK_MANAGER_NETWORK_NUM_BUFFERS = 2048;
@@ -550,7 +594,7 @@ public final class ConfigConstants {
 	/**
 	 * Default setting for the switch for hash join bloom filters for spilled partitions.
 	 */
-	public static final boolean DEFAULT_RUNTIME_HASH_JOIN_BLOOM_FILTERS = true;
+	public static final boolean DEFAULT_RUNTIME_HASH_JOIN_BLOOM_FILTERS = false;
 	
 	/**
 	 * The default value for the maximum spilling fan in/out.
@@ -685,33 +729,23 @@ public final class ConfigConstants {
 	/**
 	 * Sets the number of local task managers
 	 */
-	public static final String LOCAL_INSTANCE_MANAGER_NUMBER_TASK_MANAGER = "localinstancemanager.numtaskmanager";
+	public static final String LOCAL_NUMBER_TASK_MANAGER = "local.number-taskmanager";
 
-	public static final String LOCAL_INSTANCE_MANAGER_START_WEBSERVER = "localinstancemanager.start-webserver";
+	public static final int DEFAULT_LOCAL_NUMBER_TASK_MANAGER = 1;
+
+	public static final String LOCAL_NUMBER_JOB_MANAGER = "local.number-jobmanager";
+
+	public static final int DEFAULT_LOCAL_NUMBER_JOB_MANAGER = 1;
+
+	public static final String LOCAL_START_WEBSERVER = "local.start-webserver";
+
+  	// --------------------------- Recovery ---------------------------------
+
+	public static String DEFAULT_RECOVERY_MODE = "standalone";
 
 	// --------------------------- ZooKeeper ----------------------------------
 
-	/** ZooKeeper servers. */
-	public static final String ZOOKEEPER_QUORUM_KEY = "ha.zookeeper.quorum";
-
-	/** ZooKeeper root path. */
-	public static final String ZOOKEEPER_DIR_KEY = "ha.zookeeper.dir";
-
-	public static final String ZOOKEEPER_LATCH_PATH = "ha.zookeeper.dir.latch";
-
-	public static final String ZOOKEEPER_LEADER_PATH = "ha.zookeeper.dir.leader";
-
-	public static final String ZOOKEEPER_SESSION_TIMEOUT = "ha.zookeeper.client.session-timeout";
-
-	public static final String ZOOKEEPER_CONNECTION_TIMEOUT = "ha.zookeeper.client.connection-timeout";
-
-	public static final String ZOOKEEPER_RETRY_WAIT = "ha.zookeeper.client.retry-wait";
-
-	public static final String ZOOKEEPER_MAX_RETRY_ATTEMPTS = "ha.zookeeper.client.max-retry-attempts";
-
-	// - Defaults -------------------------------------------------------------
-
-	public static final String DEFAULT_ZOOKEEPER_ZNODE_ROOT = "/flink";
+	public static final String DEFAULT_ZOOKEEPER_DIR_KEY = "/flink";
 
 	public static final String DEFAULT_ZOOKEEPER_LATCH_PATH = "/leaderlatch";
 

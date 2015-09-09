@@ -24,7 +24,7 @@ import org.apache.flink.configuration.Configuration;
 import org.apache.flink.runtime.event.AbstractEvent;
 import org.apache.flink.runtime.io.network.partition.consumer.StreamTestSingleInputGate;
 import org.apache.flink.runtime.jobgraph.tasks.AbstractInvokable;
-import org.apache.flink.runtime.memorymanager.MemoryManager;
+import org.apache.flink.runtime.memory.MemoryManager;
 import org.apache.flink.runtime.operators.testutils.MockInputSplitProvider;
 import org.apache.flink.streaming.api.collector.selector.BroadcastOutputSelectorWrapper;
 import org.apache.flink.streaming.api.collector.selector.OutputSelector;
@@ -35,6 +35,7 @@ import org.apache.flink.streaming.api.operators.AbstractStreamOperator;
 import org.apache.flink.streaming.api.operators.StreamOperator;
 import org.apache.flink.streaming.runtime.partitioner.BroadcastPartitioner;
 import org.apache.flink.streaming.runtime.streamrecord.MultiplexingStreamRecordSerializer;
+import org.apache.flink.streaming.runtime.streamrecord.StreamElement;
 import org.apache.flink.util.InstantiationUtil;
 import org.junit.Assert;
 
@@ -79,11 +80,11 @@ public class StreamTaskTestHarness<OUT> {
 	private AbstractInvokable task;
 
 	private TypeSerializer<OUT> outputSerializer;
-	private TypeSerializer<Object> outputStreamRecordSerializer;
+	private TypeSerializer<StreamElement> outputStreamRecordSerializer;
 
 	private ConcurrentLinkedQueue<Object> outputList;
 
-	protected Thread taskThread;
+	protected TaskThread taskThread;
 
 	// These don't get initialized, the one-input/two-input specific test harnesses
 	// must initialize these if they want to simulate input. We have them here so that all the
@@ -119,8 +120,7 @@ public class StreamTaskTestHarness<OUT> {
 	/**
 	 * This must be overwritten for OneInputStreamTask or TwoInputStreamTask test harnesses.
 	 */
-	protected void initializeInputs() throws IOException, InterruptedException {
-	}
+	protected void initializeInputs() throws IOException, InterruptedException {}
 
 	@SuppressWarnings("unchecked")
 	private void initializeOutput() {
@@ -161,32 +161,19 @@ public class StreamTaskTestHarness<OUT> {
 
 		task.registerInputOutput();
 
-		taskThread = new Thread(new Runnable() {
-			@Override
-			public void run() {
-
-
-
-				try {
-					task.invoke();
-					shutdownIOManager();
-					shutdownMemoryManager();
-				} catch (Exception e) {
-					throw new RuntimeException(e);
-				}
-
-			}
-		});
-
+		taskThread = new TaskThread(task);
 		taskThread.start();
 	}
 
-	public void waitForTaskCompletion() throws InterruptedException {
+	public void waitForTaskCompletion() throws Exception {
 		if (taskThread == null) {
 			throw new IllegalStateException("Task thread was not started.");
 		}
 
 		taskThread.join();
+		if (taskThread.getError() != null) {
+			throw new Exception("error in task", taskThread.getError());
+		}
 	}
 
 	/**
@@ -298,6 +285,37 @@ public class StreamTaskTestHarness<OUT> {
 	public void endInput() {
 		for (int i = 0; i < numInputGates; i++) {
 			inputGates[i].endInput();
+		}
+	}
+	
+	// ------------------------------------------------------------------------
+	
+	private class TaskThread extends Thread {
+		
+		private final AbstractInvokable task;
+		
+		private volatile Throwable error;
+
+
+		TaskThread(AbstractInvokable task) {
+			super("Task Thread");
+			this.task = task;
+		}
+
+		@Override
+		public void run() {
+			try {
+				task.invoke();
+				shutdownIOManager();
+				shutdownMemoryManager();
+			}
+			catch (Throwable t) {
+				this.error = t;
+			}
+		}
+
+		public Throwable getError() {
+			return error;
 		}
 	}
 }

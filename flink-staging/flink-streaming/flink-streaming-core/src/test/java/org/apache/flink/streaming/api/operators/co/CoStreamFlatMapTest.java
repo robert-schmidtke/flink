@@ -23,9 +23,6 @@ import java.io.Serializable;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
 import org.apache.flink.configuration.Configuration;
-import org.apache.flink.streaming.api.datastream.DataStream;
-import org.apache.flink.streaming.api.environment.LocalStreamEnvironment;
-import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.streaming.api.functions.co.CoFlatMapFunction;
 import org.apache.flink.streaming.api.functions.co.RichCoFlatMapFunction;
 import org.apache.flink.streaming.api.watermark.Watermark;
@@ -168,22 +165,5 @@ public class CoStreamFlatMapTest implements Serializable {
 			out.collect(value.toString());
 		}
 
-	}
-
-	@SuppressWarnings("unchecked")
-	@Test
-	public void multipleInputTest() {
-		LocalStreamEnvironment env = StreamExecutionEnvironment.createLocalEnvironment(1);
-
-		DataStream<Integer> ds1 = env.fromElements(1, 3, 5);
-		DataStream<Integer> ds2 = env.fromElements(2, 4).union(ds1);
-		
-		try {
-			ds1.forward().union(ds2);
-			fail();
-		} catch (RuntimeException e) {
-			// expected
-		}
-		
 	}
 }

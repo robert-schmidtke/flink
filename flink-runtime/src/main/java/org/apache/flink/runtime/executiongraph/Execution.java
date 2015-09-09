@@ -46,9 +46,12 @@ import org.apache.flink.runtime.messages.Messages;
 import org.apache.flink.runtime.messages.TaskMessages.TaskOperationResult;
 import org.apache.flink.runtime.state.StateHandle;
 import org.apache.flink.runtime.taskmanager.Task;
-import org.apache.flink.runtime.util.SerializedValue;
+import org.apache.flink.runtime.util.SerializableObject;
+import org.apache.flink.util.SerializedValue;
 import org.apache.flink.util.ExceptionUtils;
+
 import org.slf4j.Logger;
+
 import scala.concurrent.ExecutionContext;
 import scala.concurrent.Future;
 import scala.concurrent.duration.FiniteDuration;
@@ -137,7 +140,7 @@ public class Execution implements Serializable {
 	private ExecutionContext executionContext;
 
 	/* Lock for updating the accumulators atomically. */
-	private final Object accumulatorLock = new Object();
+	private final SerializableObject accumulatorLock = new SerializableObject();
 
 	/* Continuously updated map of user-defined accumulators */
 	private volatile Map<String, Accumulator<?, ?>> userAccumulators;
@@ -497,8 +500,6 @@ public class Execution implements Serializable {
 					@Override
 					public Boolean call() throws Exception {
 						try {
-							final ExecutionGraph consumerGraph = consumerVertex.getExecutionGraph();
-
 							consumerVertex.scheduleForExecution(
 									consumerVertex.getExecutionGraph().getScheduler(),
 									consumerVertex.getExecutionGraph().isQueuedSchedulingAllowed());
@@ -555,7 +556,9 @@ public class Execution implements Serializable {
 							partitionId, partitionLocation);
 
 					final UpdatePartitionInfo updateTaskMessage = new UpdateTaskSinglePartitionInfo(
-							consumer.getAttemptId(), partition.getIntermediateResult().getId(), descriptor);
+						consumer.getAttemptId(),
+						partition.getIntermediateResult().getId(),
+						descriptor);
 
 					sendUpdatePartitionInfoRpcCall(consumerSlot, updateTaskMessage);
 				}

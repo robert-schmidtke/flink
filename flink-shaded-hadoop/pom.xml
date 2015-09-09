@@ -61,7 +61,6 @@ under the License.
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
 				<artifactId>maven-shade-plugin</artifactId>
-				<version>2.3</version>
 				<executions>
 					<execution>
 						<id>shade-hadoop</id>
@@ -101,6 +100,10 @@ under the License.
 								<relocation>
 									<pattern>org.jboss.netty</pattern>
 									<shadedPattern>org.apache.flink.hadoop.shaded.org.jboss.netty</shadedPattern>
+								</relocation>
+								<relocation>
+									<pattern>org.apache.curator</pattern>
+									<shadedPattern>org.apache.flink.hadoop.shaded.org.apache.curator</shadedPattern>
 								</relocation>
 							</relocations>
 						</configuration>

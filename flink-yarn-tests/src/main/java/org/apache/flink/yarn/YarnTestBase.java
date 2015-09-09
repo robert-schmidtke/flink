@@ -22,6 +22,7 @@ import org.apache.commons.io.FileUtils;
 import org.apache.flink.client.CliFrontend;
 import org.apache.flink.client.FlinkYarnSessionCli;
 import org.apache.flink.test.util.TestBaseUtils;
+import org.apache.flink.util.TestLogger;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.service.Service;
 import org.apache.hadoop.yarn.api.records.ApplicationReport;
@@ -69,7 +70,7 @@ import java.util.concurrent.ConcurrentMap;
  *
  * The test is not thread-safe. Parallel execution of tests is not possible!
  */
-public abstract class YarnTestBase {
+public abstract class YarnTestBase extends TestLogger {
 	private static final Logger LOG = LoggerFactory.getLogger(YarnTestBase.class);
 
 	protected final static PrintStream originalStdout = System.out;
@@ -461,7 +462,7 @@ public abstract class YarnTestBase {
 					runner.join(30000);
 				}
 				catch (InterruptedException e) {
-					LOG.debug("Interrupted while stopping runner", e);
+					LOG.warn("Interrupted while stopping runner", e);
 				}
 				LOG.warn("RunWithArgs runner stopped.");
 			}
@@ -547,12 +548,10 @@ public abstract class YarnTestBase {
 
 	@AfterClass
 	public static void tearDown() {
-		//shutdown YARN cluster
-		if (yarnCluster != null) {
-			LOG.info("Shutting down MiniYarn cluster");
-			yarnCluster.stop();
-			yarnCluster = null;
-		}
+		/*
+			We don't shut down the MiniCluster, as it is prone to blocking infinitely.
+		*/
+		
 		// When we are on travis, we copy the tmp files of JUnit (containing the MiniYARNCluster log files)
 		// to <flinkRoot>/target/flink-yarn-tests-*.
 		// The files from there are picked up by the ./tools/travis_watchdog.sh script

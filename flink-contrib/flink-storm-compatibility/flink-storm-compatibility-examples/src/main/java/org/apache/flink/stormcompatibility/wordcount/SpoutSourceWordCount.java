@@ -18,12 +18,14 @@
 package org.apache.flink.stormcompatibility.wordcount;
 
 import backtype.storm.topology.IRichSpout;
+import backtype.storm.utils.Utils;
+
 import org.apache.flink.api.common.functions.FlatMapFunction;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.api.java.typeutils.TypeExtractor;
 import org.apache.flink.examples.java.wordcount.util.WordCountData;
-import org.apache.flink.stormcompatibility.util.StormFileSpout;
-import org.apache.flink.stormcompatibility.util.StormInMemorySpout;
+import org.apache.flink.stormcompatibility.wordcount.stormoperators.StormWordCountFileSpout;
+import org.apache.flink.stormcompatibility.wordcount.stormoperators.StormWordCountInMemorySpout;
 import org.apache.flink.stormcompatibility.wrappers.StormFiniteSpoutWrapper;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
@@ -140,11 +142,14 @@ public class SpoutSourceWordCount {
 			final String[] tokens = textPath.split(":");
 			final String localFile = tokens[tokens.length - 1];
 			return env.addSource(
-					new StormFiniteSpoutWrapper<String>(new StormFileSpout(localFile), true),
+					new StormFiniteSpoutWrapper<String>(new StormWordCountFileSpout(localFile),
+							new String[] { Utils.DEFAULT_STREAM_ID }),
 					TypeExtractor.getForClass(String.class)).setParallelism(1);
 		}
 
-		return env.addSource(new StormFiniteSpoutWrapper<String>(new StormInMemorySpout(WordCountData.WORDS), true),
+		return env.addSource(
+				new StormFiniteSpoutWrapper<String>(new StormWordCountInMemorySpout(),
+						new String[] { Utils.DEFAULT_STREAM_ID }),
 				TypeExtractor.getForClass(String.class)).setParallelism(1);
 
 	}

@@ -101,9 +101,13 @@ public class FlinkYarnCluster extends AbstractFlinkYarnCluster {
 	 * @throws IOException
 	 * @throws YarnException
 	 */
-	public FlinkYarnCluster(final YarnClient yarnClient, final ApplicationId appId, Configuration hadoopConfig,
-							org.apache.flink.configuration.Configuration flinkConfig,
-							Path sessionFilesDir, boolean detached) throws IOException, YarnException {
+	public FlinkYarnCluster(
+			final YarnClient yarnClient,
+			final ApplicationId appId,
+			Configuration hadoopConfig,
+			org.apache.flink.configuration.Configuration flinkConfig,
+			Path sessionFilesDir,
+			boolean detached) throws IOException, YarnException {
 		this.akkaDuration = AkkaUtils.getTimeout(flinkConfig);
 		this.akkaTimeout = Timeout.durationToTimeout(akkaDuration);
 		this.yarnClient = yarnClient;
@@ -220,9 +224,8 @@ public class FlinkYarnCluster extends AbstractFlinkYarnCluster {
 
 	// -------------------------- Interaction with the cluster ------------------------
 
-	/**
+	/*
 	 * This call blocks until the message has been recevied.
-	 * @param jobID
 	 */
 	@Override
 	public void stopAfterJob(JobID jobID) {
@@ -232,6 +235,11 @@ public class FlinkYarnCluster extends AbstractFlinkYarnCluster {
 		} catch (Exception e) {
 			throw new RuntimeException("Unable to tell application master to stop once the specified job has been finised", e);
 		}
+	}
+
+	@Override
+	public org.apache.flink.configuration.Configuration getFlinkConfiguration() {
+		return flinkConfig;
 	}
 
 	@Override
@@ -265,10 +273,10 @@ public class FlinkYarnCluster extends AbstractFlinkYarnCluster {
 	@Override
 	public FlinkYarnClusterStatus getClusterStatus() {
 		if(!isConnected) {
-			throw new IllegalStateException("The cluster has been connected to the ApplicationMaster.");
+			throw new IllegalStateException("The cluster is not connected to the ApplicationMaster.");
 		}
 		if(hasBeenStopped()) {
-			throw new RuntimeException("The FlinkYarnCluster has alread been stopped");
+			throw new RuntimeException("The FlinkYarnCluster has already been stopped");
 		}
 		Future<Object> clusterStatusOption = ask(applicationClient, Messages.LocalGetYarnClusterStatus$.MODULE$, akkaTimeout);
 		Object clusterStatus;
@@ -282,7 +290,7 @@ public class FlinkYarnCluster extends AbstractFlinkYarnCluster {
 		} else if(clusterStatus instanceof Some) {
 			return (FlinkYarnClusterStatus) (((Some) clusterStatus).get());
 		} else {
-			throw new RuntimeException("Unexpected type: "+clusterStatus.getClass().getCanonicalName());
+			throw new RuntimeException("Unexpected type: " + clusterStatus.getClass().getCanonicalName());
 		}
 	}
 
@@ -368,9 +376,9 @@ public class FlinkYarnCluster extends AbstractFlinkYarnCluster {
 
 					if(obj instanceof Messages.YarnMessage) {
 						Messages.YarnMessage msg = (Messages.YarnMessage) obj;
-						ret.add("["+msg.date()+"] "+msg.message());
+						ret.add("[" + msg.date() + "] " + msg.message());
 					} else {
-						LOG.warn("LocalGetYarnMessage returned unexpected type: "+messageOption);
+						LOG.warn("LocalGetYarnMessage returned unexpected type: " + messageOption);
 					}
 				}
 			}
@@ -419,7 +427,7 @@ public class FlinkYarnCluster extends AbstractFlinkYarnCluster {
 
 					Await.ready(response, akkaDuration);
 				} catch(Exception e) {
-					throw new RuntimeException("Error while stopping YARN Application Client", e);
+					LOG.warn("Error while stopping YARN Application Client", e);
 				}
 			}
 
@@ -429,7 +437,7 @@ public class FlinkYarnCluster extends AbstractFlinkYarnCluster {
 			actorSystem = null;
 		}
 
-		LOG.info("Deleting files in "+sessionFilesDir );
+		LOG.info("Deleting files in " + sessionFilesDir );
 		try {
 			FileSystem shutFS = FileSystem.get(hadoopConfig);
 			shutFS.delete(sessionFilesDir, true); // delete conf and jar file.
@@ -522,7 +530,7 @@ public class FlinkYarnCluster extends AbstractFlinkYarnCluster {
 			}
 			if(running.get() && !yarnClient.isInState(Service.STATE.STARTED)) {
 				// == if the polling thread is still running but the yarn client is stopped.
-				LOG.warn("YARN client is unexpected in state "+yarnClient.getServiceState());
+				LOG.warn("YARN client is unexpected in state " + yarnClient.getServiceState());
 			}
 		}
 	}

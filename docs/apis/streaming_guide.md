@@ -290,25 +290,25 @@ instance (with its fields set to new values). The object reuse mode will lead to
 because fewer objects are created, but the user has to manually take care of what they are doing
 with the object references.
 
-### Partitioning
+### Data Shipping Strategies
 
-Partitioning controls how individual data points of a stream are distributed among the parallel instances of the transformation operators. This also controls the ordering of the records in the `DataStream`. There is partial ordering guarantee for the outputs with respect to the partitioning scheme (outputs produced from each partition are guaranteed to arrive in the order they were produced).
+The data shipping strategy controls how individual elements of a stream are distributed among the parallel instances of a transformation operator. This also controls the ordering of the records in the `DataStream`. There is partial ordering guarantee for the outputs with respect to the shipping strategy (outputs produced from each partition are guaranteed to arrive in the order they were produced).
 
-There are several partitioning types supported in Flink Streaming:
+These are the supported shipping strategies:
 
- * *Forward (default)*: Forward partitioning directs the output data to the next operator on the same machine (if possible) avoiding expensive network I/O. If there are more processing nodes than inputs or vice versa the load is distributed among the extra nodes in a round-robin fashion. This is the default partitioner.
+ * *Forward*: Forward shipping directs the output data to the next operator on the same machine, avoiding expensive network I/O. It can only be used when the parallelism of the input operations matches the parallelism of the downstream operation. This is the default shipping strategy if no strategy is specified and if the parallelism allows it.
 Usage: `dataStream.forward()`
- * *Shuffle*: Shuffle partitioning randomly partitions the output data stream to the next operator using uniform distribution. Use this only when it is important that the partitioning is randomised. If you only care about an even load use *Rebalance*.
+ * *Shuffle*: Shuffle randomly partitions the output data stream to the next operator using uniform distribution. Use this only when it is important that the partitioning is randomised. If you only care about an even load use *Rebalance*.
 Usage: `dataStream.shuffle()`
- * *Rebalance*: Rebalance partitioning directs the output data stream to the next operator in a round-robin fashion, achieving a balanced distribution.
+ * *Rebalance*: Rebalance directs the output data stream to the next operator in a round-robin fashion, achieving a balanced distribution. This is the default strategy if no strategy is defined and forward shipping is not possible because the parallelism of operations differs.
 Usage: `dataStream.rebalance()`
- * *Field/Key Partitioning*: Field/Key partitioning partitions the output data stream based on the hash code of a selected key of the tuples. Data points with the same key are directed to the same operator instance. 
+ * *Field/Key Partitioning*: Field/Key partitioning partitions the output data stream based on the hash code of a selected key of the tuples. Data points with the same key are directed to the same operator instance.
 Usage: `dataStream.partitionByHash(fields…)`
-* *Field/Key Grouping*: Field/Key grouping takes partitioning one step further and seperates the elements to disjoint groups based on the hash code. These groups are processed separately by the next downstream operator. 
+* *Field/Key Grouping*: Field/Key grouping takes field/key partitioning one step further and seperates the elements into disjoint groups based on the hash code. These groups are processed separately by the next downstream operator.
 Usage: `dataStream.groupBy(fields…)`
- * *Broadcast*: Broadcast partitioning sends the output data stream to all parallel instances of the next operator.
+ * *Broadcast*: Broadcast shipping sends the output data stream to all parallel instances of the next operator.
 Usage: `dataStream.broadcast()`
- * *Global*: All data points are directed to the first instance of the operator. 
+ * *Global*: All elements are directed to the first downstream instance of the operator.
 Usage: `dataStream.global()`
 
 Custom partitioning can also be used by giving a Partitioner function and a single field key to partition on, similarly to the batch API.
@@ -330,17 +330,15 @@ val result = in
 </div>
 </div>
 
-By default *Forward* partitioning is used. 
-
-Partitioning does not remain in effect after a transformation, so it needs to be set again for subsequent operations.
+The shipping strategy does not remain in effect after a transformation, so it needs to be set again for subsequent operations.
 
 ### Connecting to the outside world
 
-The user is expected to connect to the outside world through the source and the sink interfaces. 
+The user is expected to connect to the outside world through the source and the sink interfaces.
 
 #### Sources
 
-Sources can by created by using `StreamExecutionEnvironment.addSource(sourceFunction)`. 
+Sources can by created by using `StreamExecutionEnvironment.addSource(sourceFunction)`.
 Either use one of the source functions that come with Flink or write a custom source
 by implementing the `SourceFunction` interface. By default, sources run with
 parallelism of 1. To create parallel sources the user's source function needs to implement
@@ -534,7 +532,8 @@ dataStream.fold("", new FoldFunction<String, String>() {
     <tr>
       <td><strong>Union</strong></td>
       <td>
-        <p>Union of two or more data streams creating a new stream containing all the elements from all the streams.</p>
+        <p>Union of two or more data streams creating a new stream containing all the elements from all the streams. Node: If you union a data stream
+        with itself you will still only get each element once.</p>
 {% highlight java %}
 dataStream.union(otherStream1, otherStream2, …)
 {% endhighlight %}
@@ -1274,10 +1273,33 @@ Rich functions provide, in addition to the user-defined function (`map()`, `redu
 
 [Back to top](#top)
 
+
+
+Fault Tolerance
+----------------
+
+Flink has a checkpointig mechanism that recovers streaming jobs after failues. The checkpointing mechanism requires a *persistent* or *durable* source that
+can be asked for prior records again (Apache Kafka is a good example of a durable source).
+
+The checkpointing mechanism stores the progress in the source as well as the user-defined state (see [Stateful Computation](#Stateful_computation))
+consistently to provide *exactly once* processing guarantees.
+
+To enable checkpointing, call `enableCheckpointing(n)` on the `StreamExecutionEnvironment`, where *n* is the checkpoint interval, in milliseconds.
+
+Other parameters for checkpointing include:
+
+  - *Number of retries*: The `setNumberOfExecutionRerties()` method defines how many times the job is restarted after a failure. When checkpointing is activated, but this value is not explicitly set, the job is restarted infinitely often.
+  - *exactly-once vs. at-least-once*: You can optionally pass a mode to the `enableCheckpointing(n)` method to choose between the two guarantee levels. Exactly-once is preferrable for most applications. At-least-once may be relevant for certain super-low-latency (consistently few milliseconds) applications.
+
+The [docs on streaming fault tolerance](../internals/stream_checkpointing.html) describe in detail the technique behind Flink's streaming fault tolerance mechanism.
+
+[Back to top](#top)
+
+
 Stateful computation
 ------------
 
-Flink supports the checkpointing and persistence of user defined operator states, so in case of a failure this state can be restored to the latest checkpoint and the processing will continue from there. This gives exactly once processing semantics with respect to the operator states when the sources follow this stateful pattern as well. In practice this usually means that sources keep track of their current offset as their OperatorState. The `PersistentKafkaSource` provides this stateful functionality for reading streams from Kafka.
+Flink supports the checkpointing and persistence of user defined operator states, so in case of a failure this state can be restored to the latest checkpoint and the processing will continue from there. This gives exactly once processing semantics with respect to the operator states when the sources follow this stateful pattern as well. In practice this usually means that sources keep track of their current offset as their OperatorState. The `FlinkKafkaConsumer` provides this stateful functionality for reading streams from Kafka.
 
 ### OperatorState
 
@@ -1355,7 +1377,7 @@ public static class CounterSource implements RichParallelSourceFunction<Long> {
 }
 {% endhighlight %}
 
-Some operators might need the information when a checkpoint is fully acknowledged by Flink to communicate that with the outside world. In this case see the `flink.streaming.api.checkpoint.CheckpointComitter` interface.
+Some operators might need the information when a checkpoint is fully acknowledged by Flink to communicate that with the outside world. In this case see the `flink.streaming.api.checkpoint.CheckpointNotifier` interface.
 
 ### Checkpointed interface
 
@@ -1461,7 +1483,7 @@ Setting parallelism for operators works exactly the same way as in the batch Fli
 
 ### Buffer timeout
 
-By default, data points are not transferred on the network one-by-one, which would cause unnecessary network traffic, but are buffered in the output buffers. The size of the output buffers can be set in the Flink config files. While this method is good for optimizing throughput, it can cause latency issues when the incoming stream is not fast enough.
+By default, elements are not transferred on the network one-by-one, which would cause unnecessary network traffic, but are buffered in the output buffers. The size of the output buffers can be set in the Flink config files. While this method is good for optimizing throughput, it can cause latency issues when the incoming stream is not fast enough.
 To tackle this issue the user can call `env.setBufferTimeout(timeoutMillis)` on the execution environment (or on individual operators) to set a maximum wait time for the buffers to fill up. After this time, the buffers are flushed automatically even if they are not full. The default value for this timeout is 100 ms, which should be appropriate for most use-cases.
 
 Usage:
@@ -1488,22 +1510,38 @@ env.genereateSequence(1,10).map(myMap).setBufferTimeout(timeoutMillis)
 To maximise the throughput the user can call `setBufferTimeout(-1)` which will remove the timeout and buffers will only be flushed when they are full.
 To minimise latency, set the timeout to a value close to 0 (for example 5 or 10 ms). Theoretically, a buffer timeout of 0 will cause all output to be flushed when produced, but this setting should be avoided, because it can cause severe performance degradation.
 
-
 [Back to top](#top)
-    
+
+
 Stream connectors
 ----------------
 
 <!-- TODO: reintroduce flume -->
-Connectors provide an interface for accessing data from various third party sources (message queues). Currently three connectors are natively supported, namely [Apache Kafka](https://kafka.apache.org/),  [RabbitMQ](http://www.rabbitmq.com/) and the [Twitter Streaming API](https://dev.twitter.com/docs/streaming-apis).
+Connectors provide code for interfacing with various third-party systems.
+Typically the connector packages consist of a source and sink class
+(with the exception of Twitter where only a source is provided and Elasticsearch
+where only a sink is provided).
 
-Typically the connector packages consist of a source and sink class (with the exception of Twitter where only a source is provided). To use these sources the user needs to pass Serialization/Deserialization schemas for the connectors for the desired types. (Or use some predefined ones)
+Currently these systems are supported:
 
-To run an application using one of these connectors, additional third party components are usually required to be installed and launched, e.g. the servers for the message queues. Further instructions for these can be found in the corresponding subsections. [Docker containers](#docker-containers-for-connectors) are also provided encapsulating these services to aid users getting started with connectors.
+ * [Apache Kafka](https://kafka.apache.org/) (sink/source)
+ * [Elasticsearch](https://elastic.co/) (sink)
+ * [RabbitMQ](http://www.rabbitmq.com/) (sink/source)
+ * [Twitter Streaming API](https://dev.twitter.com/docs/streaming-apis) (source)
+
+To run an application using one of these connectors, additional third party
+components are usually required to be installed and launched, e.g. the servers
+for the message queues. Further instructions for these can be found in the
+corresponding subsections. [Docker containers](#docker-containers-for-connectors)
+are also provided encapsulating these services to aid users getting started
+with connectors.
 
 ### Apache Kafka
 
-This connector provides access to data streams from [Apache Kafka](https://kafka.apache.org/). To use this connector, add the following dependency to your project:
+This connector provides access to data streams from [Apache Kafka](https://kafka.apache.org/).
+
+There is a [separate documentation page for using Kafka with Flink](kafka.html).
+
 
 {% highlight xml %}
 <dependency>
@@ -1521,48 +1559,60 @@ Note that the streaming connectors are currently not part of the binary distribu
 * If the Kafka and Zookeeper servers are running on a remote machine, then the `advertised.host.name` setting in the `config/server.properties` file the  must be set to the machine's IP address.
 
 #### Kafka Source
-The standard `KafkaSource` is a Kafka consumer providing an access to one topic.
+The standard `FlinkKafkaConsumer082` is a Kafka consumer providing access to one topic.
 
-The following parameters have to be provided for the `KafkaSource(...)` constructor:
+The following parameters have to be provided for the `FlinkKafkaConsumer082(...)` constructor:
 
-1. Zookeeper hostname
-2. The topic name
-3. Deserialization schema
+1. The topic name
+2. A DeserializationSchema
+3. Properties for the Kafka consumer.
+  The following properties are required:
+  - "bootstrap.servers" (comma separated list of Kafka brokers)
+  - "zookeeper.connect" (comma separated list of Zookeeper servers)
+  - "group.id" the id of the consumer group
 
 Example:
 
 <div class="codetabs" markdown="1">
 <div data-lang="java" markdown="1">
 {% highlight java %}
+Properties properties = new Properties();
+properties.setProperty("bootstrap.servers", "localhost:9092");
+properties.setProperty("zookeeper.connect", "localhost:2181");
+properties.setProperty("group.id", "test");
 DataStream<String> stream = env
-	.addSource(new KafkaSource<String>("localhost:2181", "test", new SimpleStringSchema()))
+	.addSource(new FlinkKafkaConsumer082<>("topic", new SimpleStringSchema(), properties))
 	.print();
 {% endhighlight %}
 </div>
 <div data-lang="scala" markdown="1">
 {% highlight scala %}
+val properties = new Properties();
+properties.setProperty("bootstrap.servers", "localhost:9092");
+properties.setProperty("zookeeper.connect", "localhost:2181");
+properties.setProperty("group.id", "test");
 stream = env
-    .addSource(new KafkaSource[String]("localhost:2181", "test", new SimpleStringSchema)
+    .addSource(new KafkaSource[String]("topic", new SimpleStringSchema(), properties))
     .print
 {% endhighlight %}
 </div>
 </div>
 
-#### Persistent Kafka Source
-As Kafka persists all the data, a fault tolerant Kafka source can be provided.
+#### Kafka Consumers and Fault Tolerance
+As Kafka persists all the data, a fault tolerant Kafka consumer can be provided.
 
-The PersistentKafkaSource can read a topic, and if the job fails for some reason, the source will
+The FlinkKafkaConsumer082 can read a topic, and if the job fails for some reason, the source will
 continue on reading from where it left off after a restart.
 For example if there are 3 partitions in the topic with offsets 31, 122, 110 read at the time of job
 failure, then at the time of restart it will continue on reading from those offsets, no matter whether these partitions have new messages.
 
-To use fault tolerant Kafka Sources, monitoring of the topology needs to be enabled at the execution environment:
+To use fault tolerant Kafka Consumers, checkpointing of the topology needs to be enabled at the execution environment:
 
 <div class="codetabs" markdown="1">
 <div data-lang="java" markdown="1">
 {% highlight java %}
 final StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
-env.enableMonitoring(5000);
+env.enableCheckpointing(5000);
 {% endhighlight %}
 </div>
 </div>
@@ -1571,33 +1621,13 @@ Also note that Flink can only restart the topology if enough processing slots ar
 So if the topology fails due to loss of a TaskManager, there must still be enough slots available afterwards.
 Flink on YARN supports automatic restart of lost YARN containers.
 
-The following arguments have to be provided for the `PersistentKafkaSource(...)` constructor:
-
-1. Zookeeper hostname
-2. The topic name
-3. Deserialization schema
-
-Example:
-
-<div class="codetabs" markdown="1">
-<div data-lang="java" markdown="1">
-{% highlight java %}
-stream.addSource(new PersistentKafkaSource<String>("localhost:2181", "test", new SimpleStringSchema()));
-{% endhighlight %}
-</div>
-<div data-lang="scala" markdown="1">
-{% highlight scala %}
-stream.addSource(new PersistentKafkaSource[String]("localhost:2181", "test", new SimpleStringSchema))
-{% endhighlight %}
-</div>
-</div>
 
 #### Kafka Sink
 A class providing an interface for sending data to Kafka. 
 
-The followings have to be provided for the `KafkaSink(…)` constructor in order:
+The following arguments have to be provided for the `KafkaSink(…)` constructor in order:
 
-1. Zookeeper hostname
+1. Broker address (in hostname:port format, can be a comma separated list)
 2. The topic name
 3. Serialization schema
 
@@ -1606,12 +1636,12 @@ Example:
 <div class="codetabs" markdown="1">
 <div data-lang="java" markdown="1">
 {% highlight java %}
-stream.addSink(new KafkaSink<String>("localhost:2181", "test", new SimpleStringSchema()));
+stream.addSink(new KafkaSink<String>("localhost:9092", "test", new SimpleStringSchema()));
 {% endhighlight %}
 </div>
 <div data-lang="scala" markdown="1">
 {% highlight scala %}
-stream.addSink(new KafkaSink[String]("localhost:2181", "test", new SimpleStringSchema))
+stream.addSink(new KafkaSink[String]("localhost:9092", "test", new SimpleStringSchema))
 {% endhighlight %}
 </div>
 </div>
@@ -1633,9 +1663,168 @@ public KafkaSink(String zookeeperAddress, String topicId, Properties producerCon
 </div>
 </div>
 
-If this constructor is used, the user needs to make sure to set the broker with the "metadata.broker.list" property. Also the serializer configuration should be left default, the serialization should be set via SerializationSchema.
+If this constructor is used, the user needs to make sure to set the broker(s) with the "metadata.broker.list" property. Also the serializer configuration should be left default, the serialization should be set via SerializationSchema.
 
 More about Kafka can be found [here](https://kafka.apache.org/documentation.html).
+
+[Back to top](#top)
+
+### Elasticsearch
+
+This connector provides a Sink that can write to an
+[Elasticsearch](https://elastic.co/) Index. To use this connector, add the
+following dependency to your project:
+
+{% highlight xml %}
+<dependency>
+  <groupId>org.apache.flink</groupId>
+  <artifactId>flink-connector-elasticsearch</artifactId>
+  <version>{{site.version }}</version>
+</dependency>
+{% endhighlight %}
+
+Note that the streaming connectors are currently not part of the binary
+distribution. See
+[here](cluster_execution.html#linking-with-modules-not-contained-in-the-binary-distribution)
+for information about how to package the program with the libraries for
+cluster execution.
+
+#### Installing Elasticsearch
+
+Instructions for setting up an Elasticsearch cluster can be found
+[here](https://www.elastic.co/guide/en/elasticsearch/reference/current/setup.html).
+Make sure to set and remember a cluster name. This must be set when
+creating a Sink for writing to your cluster
+
+#### Elasticsearch Sink
+The connector provides a Sink that can send data to an Elasticsearch Index.
+
+The sink can use two different methods for communicating with Elasticsearch:
+
+1. An embedded Node
+2. The TransportClient
+
+See [here](https://www.elastic.co/guide/en/elasticsearch/client/java-api/current/client.html)
+for information about the differences between the two modes.
+
+This code shows how to create a sink that uses an embedded Node for
+communication:
+
+<div class="codetabs" markdown="1">
+<div data-lang="java" markdown="1">
+{% highlight java %}
+DataStream<String> input = ...;
+
+Map<String, String> config = Maps.newHashMap();
+// This instructs the sink to emit after every element, otherwise they would be buffered
+config.put("bulk.flush.max.actions", "1");
+config.put("cluster.name", "my-cluster-name");
+
+input.addSink(new ElasticsearchSink<>(config, new IndexRequestBuilder<String>() {
+    @Override
+    public IndexRequest createIndexRequest(String element, RuntimeContext ctx) {
+        Map<String, Object> json = new HashMap<>();
+        json.put("data", element);
+
+        return Requests.indexRequest()
+                .index("my-index")
+                .type("my-type")
+                .source(json);
+    }
+}));
+{% endhighlight %}
+</div>
+<div data-lang="scala" markdown="1">
+{% highlight scala %}
+val input: DataStream[String] = ...
+
+val config = new util.HashMap[String, String]
+config.put("bulk.flush.max.actions", "1")
+config.put("cluster.name", "my-cluster-name")
+
+text.addSink(new ElasticsearchSink(config, new IndexRequestBuilder[String] {
+  override def createIndexRequest(element: String, ctx: RuntimeContext): IndexRequest = {
+    val json = new util.HashMap[String, AnyRef]
+    json.put("data", element)
+    println("SENDING: " + element)
+    Requests.indexRequest.index("my-index").`type`("my-type").source(json)
+  }
+}))
+{% endhighlight %}
+</div>
+</div>
+
+Not how a Map of Strings is used to configure the Sink. The configuration keys
+are documented in the Elasticsearch documentation
+[here](https://www.elastic.co/guide/en/elasticsearch/reference/current/index.html).
+Especially important is the `cluster.name` parameter that must correspond to
+the name of your cluster.
+
+Internally, the sink uses a `BulkProcessor` to send index requests to the cluster.
+This will buffer elements before sending a request to the cluster. The behaviour of the
+`BulkProcessor` can be configured using these config keys:
+ * **bulk.flush.max.actions**: Maximum amount of elements to buffer
+ * **bulk.flush.max.size.mb**: Maximum amount of data (in megabytes) to buffer
+ * **bulk.flush.interval.ms**: Interval at which to flush data regardless of the other two
+  settings in milliseconds
+
+This example code does the same, but with a `TransportClient`:
+<div class="codetabs" markdown="1">
+<div data-lang="java" markdown="1">
+{% highlight java %}
+DataStream<String> input = ...;
+
+Map<String, String> config = Maps.newHashMap();
+// This instructs the sink to emit after every element, otherwise they would be buffered
+config.put("bulk.flush.max.actions", "1");
+config.put("cluster.name", "my-cluster-name");
+
+List<TransportAddress> transports = new ArrayList<String>();
+transports.add(new InetSocketTransportAddress("node-1", 9300));
+transports.add(new InetSocketTransportAddress("node-2", 9300));
+
+input.addSink(new ElasticsearchSink<>(config, transports, new IndexRequestBuilder<String>() {
+    @Override
+    public IndexRequest createIndexRequest(String element, RuntimeContext ctx) {
+        Map<String, Object> json = new HashMap<>();
+        json.put("data", element);
+
+        return Requests.indexRequest()
+                .index("my-index")
+                .type("my-type")
+                .source(json);
+    }
+}));
+{% endhighlight %}
+</div>
+<div data-lang="scala" markdown="1">
+{% highlight scala %}
+val input: DataStream[String] = ...
+
+val config = new util.HashMap[String, String]
+config.put("bulk.flush.max.actions", "1")
+config.put("cluster.name", "my-cluster-name")
+
+val transports = new ArrayList[String]
+transports.add(new InetSocketTransportAddress("node-1", 9300))
+transports.add(new InetSocketTransportAddress("node-2", 9300))
+
+text.addSink(new ElasticsearchSink(config, transports, new IndexRequestBuilder[String] {
+  override def createIndexRequest(element: String, ctx: RuntimeContext): IndexRequest = {
+    val json = new util.HashMap[String, AnyRef]
+    json.put("data", element)
+    println("SENDING: " + element)
+    Requests.indexRequest.index("my-index").`type`("my-type").source(json)
+  }
+}))
+{% endhighlight %}
+</div>
+</div>
+
+The difference is that we now need to provide a list of Elasticsearch Nodes
+to which the sink should connect using a `TransportClient`.
+
+More about information about Elasticsearch can be found [here](https://elastic.co).
 
 [Back to top](#top)
 

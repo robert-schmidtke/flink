@@ -19,49 +19,52 @@ package org.apache.flink.streaming.runtime.io;
 
 import java.io.IOException;
 
-import com.google.common.base.Preconditions;
 import org.apache.flink.api.common.typeutils.TypeSerializer;
 import org.apache.flink.runtime.event.AbstractEvent;
 import org.apache.flink.runtime.io.network.api.writer.RecordWriter;
 import org.apache.flink.runtime.plugable.SerializationDelegate;
 import org.apache.flink.streaming.api.operators.Output;
+import org.apache.flink.streaming.runtime.streamrecord.StreamElement;
 import org.apache.flink.streaming.api.watermark.Watermark;
 import org.apache.flink.streaming.runtime.streamrecord.MultiplexingStreamRecordSerializer;
 import org.apache.flink.streaming.runtime.streamrecord.StreamRecord;
 import org.apache.flink.streaming.runtime.streamrecord.StreamRecordSerializer;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+
+import static com.google.common.base.Preconditions.checkNotNull;
 
 /**
  * Implementation of {@link Output} that sends data using a {@link RecordWriter}.
  */
 public class RecordWriterOutput<OUT> implements Output<StreamRecord<OUT>> {
 
-	private static final Logger LOG = LoggerFactory.getLogger(RecordWriterOutput.class);
-
-	private RecordWriter<SerializationDelegate<Object>> recordWriter;
+	private StreamRecordWriter<SerializationDelegate<StreamElement>> recordWriter;
 	
-	private SerializationDelegate<Object> serializationDelegate;
+	private SerializationDelegate<StreamElement> serializationDelegate;
 
+	
 	@SuppressWarnings("unchecked")
 	public RecordWriterOutput(
-			RecordWriter<?> recordWriter,
+			StreamRecordWriter<SerializationDelegate<StreamRecord<OUT>>> recordWriter,
 			TypeSerializer<OUT> outSerializer,
 			boolean enableWatermarkMultiplexing) {
+
+		checkNotNull(recordWriter);
 		
-		Preconditions.checkNotNull(recordWriter);
+		// generic hack: cast the writer to generic Object type so we can use it 
+		// with multiplexed records and watermarks
+		this.recordWriter = (StreamRecordWriter<SerializationDelegate<StreamElement>>) 
+				(StreamRecordWriter<?>) recordWriter;
 
-		this.recordWriter = (RecordWriter<SerializationDelegate<Object>>) recordWriter;
-
-		TypeSerializer<Object> outRecordSerializer;
+		TypeSerializer<StreamElement> outRecordSerializer;
 		if (enableWatermarkMultiplexing) {
 			outRecordSerializer = new MultiplexingStreamRecordSerializer<OUT>(outSerializer);
 		} else {
-			outRecordSerializer = (TypeSerializer<Object>) (TypeSerializer<?>) new StreamRecordSerializer<OUT>(outSerializer);
+			outRecordSerializer = (TypeSerializer<StreamElement>)
+					(TypeSerializer<?>) new StreamRecordSerializer<OUT>(outSerializer);
 		}
 
 		if (outSerializer != null) {
-			serializationDelegate = new SerializationDelegate<Object>(outRecordSerializer);
+			serializationDelegate = new SerializationDelegate<StreamElement>(outRecordSerializer);
 		}
 	}
 
@@ -71,11 +74,9 @@ public class RecordWriterOutput<OUT> implements Output<StreamRecord<OUT>> {
 
 		try {
 			recordWriter.emit(serializationDelegate);
-		} catch (Exception e) {
-			if (LOG.isErrorEnabled()) {
-				LOG.error("Emit failed: {}", e);
-			}
-			throw new RuntimeException("Element emission failed.", e);
+		}
+		catch (Exception e) {
+			throw new RuntimeException(e.getMessage(), e);
 		}
 	}
 
@@ -85,33 +86,27 @@ public class RecordWriterOutput<OUT> implements Output<StreamRecord<OUT>> {
 		
 		try {
 			recordWriter.broadcastEmit(serializationDelegate);
-		} catch (Exception e) {
-			if (LOG.isErrorEnabled()) {
-				LOG.error("Watermark emit failed: {}", e);
-			}
-			throw new RuntimeException(e);
 		}
-	}
-
-	@Override
-	public void close() {
-		try {
-			if (recordWriter instanceof StreamRecordWriter) {
-				((StreamRecordWriter<?>) recordWriter).close();
-			} else {
-				recordWriter.flush();
-			}
+		catch (Exception e) {
+			throw new RuntimeException(e.getMessage(), e);
 		}
-		catch (IOException e) {
-			throw new RuntimeException("Failed to flush final output", e);
-		}
-	}
-
-	public void clearBuffers() {
-		recordWriter.clearBuffers();
 	}
 
 	public void broadcastEvent(AbstractEvent barrier) throws IOException, InterruptedException {
 		recordWriter.broadcastEvent(barrier);
+	}
+	
+	
+	public void flush() throws IOException {
+		recordWriter.flush();
+	}
+	
+	@Override
+	public void close() {
+		recordWriter.close();
+	}
+
+	public void clearBuffers() {
+		recordWriter.clearBuffers();
 	}
 }

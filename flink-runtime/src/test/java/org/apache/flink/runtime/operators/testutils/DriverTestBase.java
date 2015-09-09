@@ -18,8 +18,6 @@
 
 package org.apache.flink.runtime.operators.testutils;
 
-import java.io.FileNotFoundException;
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedList;
@@ -27,6 +25,7 @@ import java.util.List;
 
 import org.apache.flink.api.common.ExecutionConfig;
 import org.apache.flink.runtime.taskmanager.TaskManagerRuntimeInfo;
+import org.apache.flink.util.TestLogger;
 import org.junit.Assert;
 import org.apache.flink.api.common.functions.Function;
 import org.apache.flink.api.common.functions.util.FunctionUtils;
@@ -38,8 +37,7 @@ import org.apache.flink.configuration.Configuration;
 import org.apache.flink.runtime.io.disk.iomanager.IOManager;
 import org.apache.flink.runtime.io.disk.iomanager.IOManagerAsync;
 import org.apache.flink.runtime.jobgraph.tasks.AbstractInvokable;
-import org.apache.flink.runtime.memorymanager.DefaultMemoryManager;
-import org.apache.flink.runtime.memorymanager.MemoryManager;
+import org.apache.flink.runtime.memory.MemoryManager;
 import org.apache.flink.runtime.operators.PactDriver;
 import org.apache.flink.runtime.operators.PactTaskContext;
 import org.apache.flink.runtime.operators.ResettablePactDriver;
@@ -53,7 +51,7 @@ import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
 @RunWith(Parameterized.class)
-public class DriverTestBase<S extends Function> implements PactTaskContext<S, Record> {
+public class DriverTestBase<S extends Function> extends TestLogger implements PactTaskContext<S, Record> {
 	
 	protected static final long DEFAULT_PER_SORT_MEM = 16 * 1024 * 1024;
 	
@@ -87,7 +85,7 @@ public class DriverTestBase<S extends Function> implements PactTaskContext<S, Re
 	
 	private PactDriver<S, Record> driver;
 	
-	private volatile boolean running;
+	private volatile boolean running = true;
 
 	private ExecutionConfig executionConfig;
 	
@@ -105,7 +103,7 @@ public class DriverTestBase<S extends Function> implements PactTaskContext<S, Re
 		this.perSortMem = perSortMemory;
 		this.perSortFractionMem = (double)perSortMemory/totalMem;
 		this.ioManager = new IOManagerAsync();
-		this.memManager = totalMem > 0 ? new DefaultMemoryManager(totalMem,1) : null;
+		this.memManager = totalMem > 0 ? new MemoryManager(totalMem,1) : null;
 
 		this.inputs = new ArrayList<MutableObjectIterator<Record>>();
 		this.comparators = new ArrayList<TypeComparator<Record>>();
@@ -118,7 +116,7 @@ public class DriverTestBase<S extends Function> implements PactTaskContext<S, Re
 	}
 
 	@Parameterized.Parameters
-	public static Collection<Object[]> getConfigurations() throws FileNotFoundException, IOException {
+	public static Collection<Object[]> getConfigurations() {
 
 		LinkedList<Object[]> configs = new LinkedList<Object[]>();
 
@@ -183,7 +181,6 @@ public class DriverTestBase<S extends Function> implements PactTaskContext<S, Re
 		this.stub = (S)stubClass.newInstance();
 
 		// regular running logic
-		this.running = true;
 		boolean stubOpen = false;
 
 		try {
@@ -204,6 +201,10 @@ public class DriverTestBase<S extends Function> implements PactTaskContext<S, Re
 				throw new Exception("The user defined 'open()' method caused an exception: " + t.getMessage(), t);
 			}
 
+			if (!running) {
+				return;
+			}
+			
 			// run the user code
 			driver.run();
 
@@ -221,10 +222,10 @@ public class DriverTestBase<S extends Function> implements PactTaskContext<S, Re
 				try {
 					FunctionUtils.closeFunction(this.stub);
 				}
-				catch (Throwable t) {}
+				catch (Throwable ignored) {}
 			}
 
-			// if resettable driver invoke treardown
+			// if resettable driver invoke tear down
 			if (this.driver instanceof ResettablePactDriver) {
 				final ResettablePactDriver<?, ?> resDriver = (ResettablePactDriver<?, ?>) this.driver;
 				try {
@@ -268,6 +269,13 @@ public class DriverTestBase<S extends Function> implements PactTaskContext<S, Re
 	
 	public void cancel() throws Exception {
 		this.running = false;
+		
+		// compensate for races, where cancel is called before the driver is set
+		// not that this is an artifact of a bad design of this test base, where the setup
+		// of the basic properties is not separated from the invocation of the execution logic 
+		while (this.driver == null) {
+			Thread.sleep(200);
+		}
 		this.driver.cancel();
 	}
 

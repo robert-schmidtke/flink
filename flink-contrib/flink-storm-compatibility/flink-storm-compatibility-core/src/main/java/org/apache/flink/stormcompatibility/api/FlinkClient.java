@@ -30,6 +30,7 @@ import backtype.storm.generated.Nimbus;
 import backtype.storm.generated.NotAliveException;
 import backtype.storm.utils.NimbusClient;
 import backtype.storm.utils.Utils;
+
 import org.apache.flink.api.common.JobID;
 import org.apache.flink.client.program.Client;
 import org.apache.flink.client.program.JobWithJars;
@@ -45,6 +46,7 @@ import org.apache.flink.runtime.jobmanager.JobManager;
 import org.apache.flink.runtime.messages.JobManagerMessages;
 import org.apache.flink.runtime.messages.JobManagerMessages.CancelJob;
 import org.apache.flink.runtime.messages.JobManagerMessages.RunningJobsStatus;
+
 import scala.Some;
 import scala.concurrent.Await;
 import scala.concurrent.Future;
@@ -53,7 +55,6 @@ import scala.concurrent.duration.FiniteDuration;
 import java.io.File;
 import java.io.IOException;
 import java.net.InetSocketAddress;
-import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -64,6 +65,9 @@ import java.util.Map;
  */
 public class FlinkClient {
 
+	/** The client's configuration */
+	@SuppressWarnings("unused")
+	private final Map<?,?> conf;
 	/** The jobmanager's host name */
 	private final String jobManagerHost;
 	/** The jobmanager's rpc port */
@@ -77,19 +81,24 @@ public class FlinkClient {
 	 * Instantiates a new {@link FlinkClient} for the given configuration, host name, and port. If values for {@link
 	 * Config#NIMBUS_HOST} and {@link Config#NIMBUS_THRIFT_PORT} of the given configuration are ignored.
 	 *
+	 * @param conf
+	 * 		A configuration.
 	 * @param host
 	 * 		The jobmanager's host name.
 	 * @param port
 	 * 		The jobmanager's rpc port.
 	 */
-	public FlinkClient(final String host, final int port) {
-		this(host, port, null);
+	@SuppressWarnings("rawtypes")
+	public FlinkClient(final Map conf, final String host, final int port) {
+		this(conf, host, port, null);
 	}
 
 	/**
 	 * Instantiates a new {@link FlinkClient} for the given configuration, host name, and port. If values for {@link
 	 * Config#NIMBUS_HOST} and {@link Config#NIMBUS_THRIFT_PORT} of the given configuration are ignored.
 	 *
+	 * @param conf
+	 * 		A configuration.
 	 * @param host
 	 * 		The jobmanager's host name.
 	 * @param port
@@ -97,7 +106,9 @@ public class FlinkClient {
 	 * @param timeout
 	 * 		Timeout
 	 */
-	public FlinkClient(final String host, final int port, final Integer timeout) {
+	@SuppressWarnings("rawtypes")
+	public FlinkClient(final Map conf, final String host, final int port, final Integer timeout) {
+		this.conf = conf;
 		this.jobManagerHost = host;
 		this.jobManagerPort = port;
 		if (timeout != null) {
@@ -119,7 +130,7 @@ public class FlinkClient {
 	public static FlinkClient getConfiguredClient(final Map conf) {
 		final String nimbusHost = (String) conf.get(Config.NIMBUS_HOST);
 		final int nimbusPort = Utils.getInt(conf.get(Config.NIMBUS_THRIFT_PORT)).intValue();
-		return new FlinkClient(nimbusHost, nimbusPort);
+		return new FlinkClient(conf, nimbusHost, nimbusPort);
 	}
 
 	/**
@@ -133,7 +144,7 @@ public class FlinkClient {
 		return this;
 	}
 
-	public void close() {/* nothing to do */}
+	// The following methods are derived from "backtype.storm.generated.Nimubs.Client"
 
 	/**
 	 * Parameter {@code uploadedJarLocation} is actually used to point to the local jar, because Flink does not support
@@ -172,12 +183,14 @@ public class FlinkClient {
 		final Configuration configuration = jobGraph.getJobConfiguration();
 
 		final Client client;
-		try {
-			client = new Client(new InetSocketAddress(this.jobManagerHost, this.jobManagerPort), configuration,
-					JobWithJars.buildUserCodeClassLoader(jarFiles, JobWithJars.class.getClassLoader()), -1);
-		} catch (final UnknownHostException e) {
-			throw new RuntimeException("Cannot execute job due to UnknownHostException", e);
-		}
+
+		configuration.setString(ConfigConstants.JOB_MANAGER_IPC_ADDRESS_KEY, jobManagerHost);
+		configuration.setInteger(ConfigConstants.JOB_MANAGER_IPC_PORT_KEY, jobManagerPort);
+
+		client = new Client(
+			configuration,
+			JobWithJars.buildUserCodeClassLoader(jarFiles, JobWithJars.class.getClassLoader()),
+			-1);
 
 		try {
 			client.run(jobGraph, false);
@@ -219,6 +232,8 @@ public class FlinkClient {
 					+ ":" + this.jobManagerPort, e);
 		}
 	}
+
+	// Flink specific additional methods
 
 	/**
 	 * Package internal method to get a Flink {@link JobID} from a Storm topology name.
@@ -288,7 +303,7 @@ public class FlinkClient {
 			throw new RuntimeException("Could not start actor system to communicate with JobManager", e);
 		}
 
-		return JobManager.getJobManagerRemoteReference(new InetSocketAddress(this.jobManagerHost, this.jobManagerPort),
+		return JobManager.getJobManagerActorRef(new InetSocketAddress(this.jobManagerHost, this.jobManagerPort),
 				actorSystem, AkkaUtils.getLookupTimeout(configuration));
 	}
 

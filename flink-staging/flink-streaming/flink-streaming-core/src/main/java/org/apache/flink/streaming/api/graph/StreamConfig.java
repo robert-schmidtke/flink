@@ -28,6 +28,7 @@ import org.apache.flink.api.common.typeutils.TypeSerializer;
 import org.apache.flink.api.java.functions.KeySelector;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.runtime.state.StateHandleProvider;
+import org.apache.flink.runtime.util.ClassLoaderUtil;
 import org.apache.flink.streaming.api.CheckpointingMode;
 import org.apache.flink.streaming.api.collector.selector.OutputSelectorWrapper;
 import org.apache.flink.streaming.api.operators.StreamOperator;
@@ -198,12 +199,26 @@ public class StreamConfig implements Serializable {
 			}
 		}
 	}
-
-	@SuppressWarnings({ "unchecked" })
+	
 	public <T> T getStreamOperator(ClassLoader cl) {
 		try {
-			return (T) InstantiationUtil.readObjectFromConfig(this.config, SERIALIZEDUDF, cl);
-		} catch (Exception e) {
+			@SuppressWarnings("unchecked")
+			T result = (T) InstantiationUtil.readObjectFromConfig(this.config, SERIALIZEDUDF, cl);
+			return result;
+		}
+		catch (ClassNotFoundException e) {
+			String classLoaderInfo = ClassLoaderUtil.getUserCodeClassLoaderInfo(cl);
+			boolean loadableDoubleCheck = ClassLoaderUtil.validateClassLoadable(e, cl);
+			
+			String exceptionMessage = "Cannot load user class: " + e.getMessage()
+					+ "\nClassLoader info: " + classLoaderInfo + 
+					(loadableDoubleCheck ? 
+							"\nClass was actually found in classloader - deserialization issue." :
+							"\nClass not resolvable through given classloader.");
+			
+			throw new StreamTaskException(exceptionMessage);
+		}
+		catch (Exception e) {
 			throw new StreamTaskException("Cannot instantiate user function.", e);
 		}
 	}
@@ -240,29 +255,6 @@ public class StreamConfig implements Serializable {
 
 	public long getIterationWaitTime() {
 		return config.getLong(ITERATON_WAIT, 0);
-	}
-
-	public void setSelectedNames(Integer output, List<String> selected) {
-		if (selected == null) {
-			selected = new ArrayList<String>();
-		}
-
-		try {
-			InstantiationUtil.writeObjectToConfig(selected, this.config, OUTPUT_NAME + output);
-		} catch (IOException e) {
-			throw new StreamTaskException("Cannot serialize OutputSelector for name \"" + output+ "\".", e);
-		}
-	}
-
-	@SuppressWarnings("unchecked")
-	public List<String> getSelectedNames(Integer output, ClassLoader cl) {
-		List<String> selectedNames;
-		try {
-			selectedNames = (List<String>) InstantiationUtil.readObjectFromConfig(this.config, OUTPUT_NAME + output, cl);
-		} catch (Exception e) {
-			throw new StreamTaskException("Cannot deserialize OutputSelector for name \"" + output + "\".", e);
-		}
-		return selectedNames == null ? new ArrayList<String>() : selectedNames;
 	}
 
 	public void setNumberOfInputs(int numberOfInputs) {

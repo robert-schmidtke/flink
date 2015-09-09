@@ -217,19 +217,19 @@ programs with a `main()` method. Each program consists of the same basic parts:
 1. Obtain an `ExecutionEnvironment`,
 2. Load/create the initial data,
 3. Specify transformations on this data,
-4. Specify where to put the results of your computations, and
+4. Specify where to put the results of your computations,
 5. Trigger the program execution
 
 We will now give an overview of each of those steps, please refer to the respective sections for
-more details. Note that all
-{% gh_link /flink-java/src/main/java/org/apache/flink/api/java "core classes of the Java API" %}
-are found in the package `org.apache.flink.api.java`.
+more details. Note that all core classes of the Java API are found in the package {% gh_link /flink-java/src/main/java/org/apache/flink/api/java "org.apache.flink.api.java" %}.
 
 The `ExecutionEnvironment` is the basis for all Flink programs. You can
 obtain one using these static methods on class `ExecutionEnvironment`:
 
 {% highlight java %}
 getExecutionEnvironment()
+
+createCollectionsEnvironment()
 
 createLocalEnvironment()
 createLocalEnvironment(int parallelism)
@@ -272,7 +272,7 @@ a map transformation looks like this:
 {% highlight java %}
 DataSet<String> input = ...;
 
-DataSet<Integer> tokenized = text.map(new MapFunction<String, Integer>() {
+DataSet<Integer> tokenized = input.map(new MapFunction<String, Integer>() {
     @Override
     public Integer map(String value) {
         return Integer.parseInt(value);
@@ -284,7 +284,7 @@ This will create a new DataSet by converting every String in the original
 set to an Integer. For more information and a list of all the transformations,
 please refer to [Transformations](#transformations).
 
-Once you have a DataSet containing your final results, you can either write the result
+Once you have a DataSet containing your final results, you can either write the result 
 to a file system (HDFS or local) or print it.
 
 {% highlight java %}
@@ -307,10 +307,10 @@ programs with a `main()` method. Each program consists of the same basic parts:
 1. Obtain an `ExecutionEnvironment`,
 2. Load/create the initial data,
 3. Specify transformations on this data,
-4. Specify where to put the results of your computations, and
+4. Specify where to put the results of your computations,
 5. Trigger the program execution
 
-We will now give an overview of each of those steps but please refer to the respective sections for
+We will now give an overview of each of those steps, please refer to the respective sections for
 more details. Note that all core classes of the Scala API are found in the package 
 {% gh_link /flink-scala/src/main/scala/org/apache/flink/api/scala "org.apache.flink.api.scala" %}.
 
@@ -323,6 +323,8 @@ def getExecutionEnvironment
 
 def createLocalEnvironment(parallelism: Int = Runtime.getRuntime.availableProcessors()))
 def createLocalEnvironment(customConfiguration: Configuration)
+
+def createCollectionsEnvironment
 
 def createRemoteEnvironment(host: String, port: String, jarFiles: String*)
 def createRemoteEnvironment(host: String, port: String, parallelism: Int, jarFiles: String*)
@@ -361,7 +363,7 @@ a map transformation looks like this:
 {% highlight scala %}
 val input: DataSet[String] = ...
 
-val mapped = text.map { x => x.toInt }
+val mapped = input.map { x => x.toInt }
 {% endhighlight %}
 
 This will create a new DataSet by converting every String in the original
@@ -1520,7 +1522,7 @@ Java and Scala classes are treated by Flink as a special POJO data type if they 
 
 - The type of a field must be supported by Flink. At the moment, Flink uses [Avro](http://avro.apache.org) to serialize arbitrary objects (such as `Date`).
 
-Flink analyzes the structure of POJO types, i.e., it learns about the fields of a POJO. As a result POJO types are easier to use than general types. Moreover, they Flink can process POJOs more efficiently than general types.  
+Flink analyzes the structure of POJO types, i.e., it learns about the fields of a POJO. As a result POJO types are easier to use than general types. Moreover, Flink can process POJOs more efficiently than general types.
 
 The following example shows a simple POJO with two public fields.
 
@@ -1765,7 +1767,7 @@ Flink offers a number of configuration options for CSV parsing:
 
 - `includeFields(boolean ... flag)`, `includeFields(String mask)`, or `includeFields(long bitMask)` defines which fields to read from the input file (and which to ignore). By default the first *n* fields (as defined by the number of types in the `types()` call) are parsed.
 
-- `parseQuotedStrings(char quoteChar)` enables quoted string parsing. Strings are parsed as quoted strings if the first character of the string field is the quote character (leading or tailing whitespaces are *not* trimmed). Field delimiters within quoted strings are ignored. Quoted string parsing fails if the last character of a quoted string field is not the quote character. If quoted string parsing is enabled and the first character of the field is *not* the quoting string, the string is parsed as unquoted string. By default, quoted string parsing is disabled.
+- `parseQuotedStrings(char quoteChar)` enables quoted string parsing. Strings are parsed as quoted strings if the first character of the string field is the quote character (leading or tailing whitespaces are *not* trimmed). Field delimiters within quoted strings are ignored. Quoted string parsing fails if the last character of a quoted string field is not the quote character or if the quote character appears at some point which is not the start or the end of the quoted string field (unless the quote character is escaped using '\'). If quoted string parsing is enabled and the first character of the field is *not* the quoting string, the string is parsed as unquoted string. By default, quoted string parsing is disabled.
 
 - `ignoreComments(String commentPrefix)` specifies a comment prefix. All lines that start with the specified comment prefix are not parsed and ignored. By default, no lines are ignored.
 

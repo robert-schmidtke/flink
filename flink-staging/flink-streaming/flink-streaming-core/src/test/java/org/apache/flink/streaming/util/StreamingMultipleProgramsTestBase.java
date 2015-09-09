@@ -66,7 +66,7 @@ public class StreamingMultipleProgramsTestBase extends TestBaseUtils {
 	// ------------------------------------------------------------------------
 	
 	public StreamingMultipleProgramsTestBase() {
-		TestStreamEnvironment clusterEnv = new TestStreamEnvironment(cluster, 4);
+		TestStreamEnvironment clusterEnv = new TestStreamEnvironment(cluster, DEFAULT_PARALLELISM);
 		clusterEnv.setAsContext();
 	}
 
@@ -76,7 +76,13 @@ public class StreamingMultipleProgramsTestBase extends TestBaseUtils {
 
 	@BeforeClass
 	public static void setup() throws Exception{
-		cluster = TestBaseUtils.startCluster(1, DEFAULT_PARALLELISM, StreamingMode.STREAMING, false, true);
+		cluster = TestBaseUtils.startCluster(
+			1,
+			DEFAULT_PARALLELISM,
+			StreamingMode.STREAMING,
+			false,
+			false,
+			true);
 	}
 
 	@AfterClass

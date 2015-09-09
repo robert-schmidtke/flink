@@ -14,7 +14,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.flink.stormcompatibility.api;
 
 import backtype.storm.Config;
@@ -60,7 +59,7 @@ public class FlinkSubmitter {
 	 */
 	public static void submitTopology(final String name, final Map<?, ?> stormConf, final FlinkTopology topology,
 			final SubmitOptions opts)
-			throws AlreadyAliveException, InvalidTopologyException {
+					throws AlreadyAliveException, InvalidTopologyException {
 		submitTopology(name, stormConf, topology);
 	}
 
@@ -100,22 +99,23 @@ public class FlinkSubmitter {
 		final String serConf = JSONValue.toJSONString(stormConf);
 
 		final FlinkClient client = FlinkClient.getConfiguredClient(stormConf);
-		if (client.getTopologyJobId(name) != null) {
-			throw new RuntimeException("Topology with name `" + name + "` already exists on cluster");
-		}
-		String localJar = System.getProperty("storm.jar");
-		if (localJar == null) {
-			try {
-				for (final File file : ((ContextEnvironment) ExecutionEnvironment.getExecutionEnvironment())
-						.getJars()) {
-					// TODO verify that there is onnly one jar
-					localJar = file.getAbsolutePath();
-				}
-			} catch (final ClassCastException e) {
-				// ignore
-			}
-		}
 		try {
+			if (client.getTopologyJobId(name) != null) {
+				throw new RuntimeException("Topology with name `" + name + "` already exists on cluster");
+			}
+			String localJar = System.getProperty("storm.jar");
+			if (localJar == null) {
+				try {
+					for (final File file : ((ContextEnvironment) ExecutionEnvironment.getExecutionEnvironment())
+							.getJars()) {
+						// TODO verify that there is only one jar
+						localJar = file.getAbsolutePath();
+					}
+				} catch (final ClassCastException e) {
+					// ignore
+				}
+			}
+
 			logger.info("Submitting topology " + name + " in distributed mode with conf " + serConf);
 			client.submitTopologyWithOpts(name, localJar, topology);
 		} catch (final InvalidTopologyException e) {
@@ -124,8 +124,6 @@ public class FlinkSubmitter {
 		} catch (final AlreadyAliveException e) {
 			logger.warn("Topology already alive exception", e);
 			throw e;
-		} finally {
-			client.close();
 		}
 
 		logger.info("Finished submitting topology: " + name);
@@ -148,7 +146,7 @@ public class FlinkSubmitter {
 	 */
 	public static void submitTopologyWithProgressBar(final String name, final Map<?, ?> stormConf,
 			final FlinkTopology topology)
-			throws AlreadyAliveException, InvalidTopologyException {
+					throws AlreadyAliveException, InvalidTopologyException {
 		submitTopology(name, stormConf, topology);
 	}
 
@@ -181,7 +179,7 @@ public class FlinkSubmitter {
 		if (localJar == null) {
 			throw new RuntimeException(
 					"Must submit topologies using the 'storm' client script so that StormSubmitter knows which jar " +
-							"to upload");
+					"to upload");
 		}
 
 		return localJar;

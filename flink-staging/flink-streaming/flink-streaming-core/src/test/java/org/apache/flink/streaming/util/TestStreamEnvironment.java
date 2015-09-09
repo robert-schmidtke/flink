@@ -18,6 +18,7 @@
 
 package org.apache.flink.streaming.util;
 
+import com.google.common.base.Preconditions;
 import org.apache.flink.api.common.JobExecutionResult;
 import org.apache.flink.configuration.ConfigConstants;
 import org.apache.flink.configuration.Configuration;
@@ -44,7 +45,7 @@ public class TestStreamEnvironment extends StreamExecutionEnvironment {
 	}
 
 	public TestStreamEnvironment(ForkableFlinkMiniCluster executor, int parallelism){
-		this.executor = executor;
+		this.executor = Preconditions.checkNotNull(executor);
 		setDefaultLocalParallelism(parallelism);
 		setParallelism(parallelism);
 	}
@@ -56,7 +57,8 @@ public class TestStreamEnvironment extends StreamExecutionEnvironment {
 
 	@Override
 	public JobExecutionResult execute(String jobName) throws Exception {
-		return execute(streamGraph.getJobGraph(jobName));
+		JobExecutionResult result = execute(getStreamGraph().getJobGraph(jobName));
+		return result;
 	}
 	
 	public JobExecutionResult execute(JobGraph jobGraph) throws Exception {
@@ -68,11 +70,11 @@ public class TestStreamEnvironment extends StreamExecutionEnvironment {
 			configuration.setLong(ConfigConstants.TASK_MANAGER_MEMORY_SIZE_KEY, memorySize);
 
 			executor = new ForkableFlinkMiniCluster(configuration);
+			executor.start();
 		}
 		try {
 			sync = true;
-			SerializedJobExecutionResult result = executor.submitJobAndWait(jobGraph, false);
-			latestResult = result.toJobExecutionResult(getClass().getClassLoader());
+			latestResult = executor.submitJobAndWait(jobGraph, false);
 			return latestResult;
 		} catch (JobExecutionException e) {
 			if (e.getMessage().contains("GraphConversionException")) {
@@ -81,6 +83,7 @@ public class TestStreamEnvironment extends StreamExecutionEnvironment {
 				throw e;
 			}
 		} finally {
+			transformations.clear();
 			if (internalExecutor){
 				executor.shutdown();
 			}
@@ -113,8 +116,7 @@ public class TestStreamEnvironment extends StreamExecutionEnvironment {
 			jobRunner = new Thread() {
 				public void run() {
 					try {
-						SerializedJobExecutionResult result = cluster.submitJobAndWait(jobGraph, false);
-						latestResult = result.toJobExecutionResult(getClass().getClassLoader());
+						latestResult = cluster.submitJobAndWait(jobGraph, false);
 					} catch (JobExecutionException e) {
 						// TODO remove: hack to make ITCase succeed because .submitJobAndWait() throws exception on .stop() (see this.shutdown())
 						latestResult = new JobExecutionResult(null, 0, null);
@@ -161,7 +163,7 @@ public class TestStreamEnvironment extends StreamExecutionEnvironment {
 			}
 		};
 
-		initializeFromFactory(factory);
+		initializeContextEnvironment(factory);
 	}
 
 }

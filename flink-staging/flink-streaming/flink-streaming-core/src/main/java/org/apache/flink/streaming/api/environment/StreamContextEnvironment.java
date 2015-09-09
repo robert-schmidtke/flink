@@ -47,7 +47,7 @@ public class StreamContextEnvironment extends StreamExecutionEnvironment {
 		} else {
 			// first check for old parallelism config key
 			setParallelism(GlobalConfiguration.getInteger(
-					ConfigConstants.DEFAULT_PARALLELISM_KEY,
+					ConfigConstants.DEFAULT_PARALLELISM_KEY_OLD,
 					ConfigConstants.DEFAULT_PARALLELISM));
 			// then for new
 			setParallelism(GlobalConfiguration.getInteger(
@@ -63,14 +63,15 @@ public class StreamContextEnvironment extends StreamExecutionEnvironment {
 
 	@Override
 	public JobExecutionResult execute(String jobName) throws Exception {
-		currentEnvironment = null;
 
 		JobGraph jobGraph;
 		if (jobName == null) {
-			jobGraph = this.streamGraph.getJobGraph();
+			jobGraph = this.getStreamGraph().getJobGraph();
 		} else {
-			jobGraph = this.streamGraph.getJobGraph(jobName);
+			jobGraph = this.getStreamGraph().getJobGraph(jobName);
 		}
+
+		transformations.clear();
 
 		for (File file : jars) {
 			jobGraph.addJar(new Path(file.getAbsolutePath()));

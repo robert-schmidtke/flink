@@ -27,7 +27,6 @@ import org.apache.flink.api.common.PlanExecutor;
 import org.apache.flink.api.common.Program;
 import org.apache.flink.configuration.ConfigConstants;
 import org.apache.flink.configuration.Configuration;
-import org.apache.flink.runtime.client.SerializedJobExecutionResult;
 import org.apache.flink.runtime.jobgraph.JobGraph;
 import org.apache.flink.api.java.ExecutionEnvironment;
 import org.apache.flink.optimizer.DataStatistics;
@@ -110,6 +109,7 @@ public class LocalExecutor extends PlanExecutor {
 				}
 				// start it up
 				this.flink = new LocalFlinkMiniCluster(configuration, true);
+				this.flink.start();
 			} else {
 				throw new IllegalStateException("The local executor was already started.");
 			}
@@ -169,15 +169,16 @@ public class LocalExecutor extends PlanExecutor {
 			}
 
 			try {
-				Optimizer pc = new Optimizer(new DataStatistics(), this.flink.getConfiguration());
+				Configuration configuration = this.flink.configuration();
+
+				Optimizer pc = new Optimizer(new DataStatistics(), configuration);
 				OptimizedPlan op = pc.compile(plan);
 				
-				JobGraphGenerator jgg = new JobGraphGenerator();
+				JobGraphGenerator jgg = new JobGraphGenerator(configuration);
 				JobGraph jobGraph = jgg.compileJobGraph(op);
 				
 				boolean sysoutPrint = isPrintingStatusDuringExecution();
-				SerializedJobExecutionResult result = flink.submitJobAndWait(jobGraph,sysoutPrint);
-				return result.toJobExecutionResult(ClassLoader.getSystemClassLoader());
+				return flink.submitJobAndWait(jobGraph, sysoutPrint);
 			}
 			finally {
 				if (shutDownAtEnd) {
@@ -253,7 +254,7 @@ public class LocalExecutor extends PlanExecutor {
 		LocalExecutor exec = new LocalExecutor();
 		try {
 			exec.start();
-			Optimizer pc = new Optimizer(new DataStatistics(), exec.flink.getConfiguration());
+			Optimizer pc = new Optimizer(new DataStatistics(), exec.flink.configuration());
 			OptimizedPlan op = pc.compile(plan);
 			PlanJSONDumpGenerator gen = new PlanJSONDumpGenerator();
 
