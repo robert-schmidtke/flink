@@ -169,10 +169,8 @@ else
     fi
 fi
 
-# Define HOSTNAME if it is not already set
-if [ -z "${HOSTNAME}" ]; then
-    HOSTNAME=`hostname`
-fi
+# Always define HOSTNAME on Slurm because it propagates the one of the executing node
+HOSTNAME=`hostname`
 
 IS_NUMBER="^[0-9]+$"
 
