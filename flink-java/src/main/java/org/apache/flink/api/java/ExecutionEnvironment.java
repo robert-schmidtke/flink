@@ -75,7 +75,7 @@ import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 
 /**
- * The ExecutionEnviroment is the context in which a program is executed. A
+ * The ExecutionEnvironment is the context in which a program is executed. A
  * {@link LocalEnvironment} will cause execution in the current JVM, a
  * {@link RemoteEnvironment} will cause execution on a remote setup.
  * <p>
@@ -102,9 +102,6 @@ public abstract class ExecutionEnvironment {
 	
 	/** The default parallelism used by local environments */
 	private static int defaultLocalDop = Runtime.getRuntime().availableProcessors();
-	
-	/** flag to disable local executor when using the ContextEnvironment */
-	private static boolean allowLocalExecution = true;
 	
 	// --------------------------------------------------------------------------------------------
 
@@ -155,47 +152,12 @@ public abstract class ExecutionEnvironment {
 	 * parallelism - for example calling
 	 * {@link DataSet#reduce(org.apache.flink.api.common.functions.ReduceFunction)} over the entire
 	 * set will insert eventually an operation that runs non-parallel (parallelism of one).
-	 * 
-	 * @return The parallelism used by operations, unless they override that value. This method
-	 *         returns {@code -1}, if the environments default parallelism should be used.
-	 * @deprecated Please use {@link #getParallelism}
-	 */
-	@Deprecated
-	public int getDegreeOfParallelism() {
-		return getParallelism();
-	}
-
-	/**
-	 * Gets the parallelism with which operation are executed by default. Operations can
-	 * individually override this value to use a specific parallelism via
-	 * {@link Operator#setParallelism(int)}. Other operations may need to run with a different
-	 * parallelism - for example calling
-	 * {@link DataSet#reduce(org.apache.flink.api.common.functions.ReduceFunction)} over the entire
-	 * set will insert eventually an operation that runs non-parallel (parallelism of one).
 	 *
 	 * @return The parallelism used by operations, unless they override that value. This method
 	 *         returns {@code -1}, if the environments default parallelism should be used.
 	 */
 	public int getParallelism() {
 		return config.getParallelism();
-	}
-	
-	/**
-	 * Sets the parallelism for operations executed through this environment.
-	 * Setting a parallelism of x here will cause all operators (such as join, map, reduce) to run with
-	 * x parallel instances.
-	 * <p>
-	 * This method overrides the default parallelism for this environment.
-	 * The {@link LocalEnvironment} uses by default a value equal to the number of hardware
-	 * contexts (CPU cores / threads). When executing the program via the command line client 
-	 * from a JAR file, the default parallelism is the one configured for that setup.
-	 * 
-	 * @param parallelism The parallelism
-	 * @deprecated Please use {@link #setParallelism}
-	 */
-	@Deprecated
-	public void setDegreeOfParallelism(int parallelism) {
-		setParallelism(parallelism);
 	}
 
 	/**
@@ -1127,9 +1089,7 @@ public abstract class ExecutionEnvironment {
 	 * @return A local execution environment with the specified parallelism.
 	 */
 	public static LocalEnvironment createLocalEnvironment(Configuration customConfiguration) {
-		LocalEnvironment lee = new LocalEnvironment();
-		lee.setConfiguration(customConfiguration);
-		return lee;
+		return new LocalEnvironment(customConfiguration);
 	}
 	
 	/**
@@ -1159,16 +1119,15 @@ public abstract class ExecutionEnvironment {
 	 *
 	 * @param host The host name or address of the master (JobManager), where the program should be executed.
 	 * @param port The port of the master (JobManager), where the program should be executed.
-	 * @param clientConfiguration Pass a custom configuration to the Client.
+	 * @param clientConfiguration Configuration used by the client that connects to the cluster.
 	 * @param jarFiles The JAR files with code that needs to be shipped to the cluster. If the program uses
 	 *                 user-defined functions, user-defined input formats, or any libraries, those must be
 	 *                 provided in the JAR files.
 	 * @return A remote environment that executes the program on a cluster.
 	 */
-	public static ExecutionEnvironment createRemoteEnvironment(String host, int port, Configuration clientConfiguration, String... jarFiles) {
-		RemoteEnvironment rec = new RemoteEnvironment(host, port, jarFiles);
-		rec.setClientConfiguration(clientConfiguration);
-		return rec;
+	public static ExecutionEnvironment createRemoteEnvironment(
+			String host, int port, Configuration clientConfiguration, String... jarFiles) {
+		return new RemoteEnvironment(host, port, clientConfiguration, jarFiles);
 	}
 
 	/**
@@ -1201,23 +1160,40 @@ public abstract class ExecutionEnvironment {
 	}
 	
 	// --------------------------------------------------------------------------------------------
-	//  Methods to control the context and local environments for execution from packaged programs
+	//  Methods to control the context environment and creation of explicit environments other
+	//  than the context environment
 	// --------------------------------------------------------------------------------------------
-	
+
+	/**
+	 * Sets a context environment factory, that creates the context environment for running programs
+	 * with pre-configured environments. Examples are running programs from the command line, and
+	 * running programs in the Scala shell.
+	 * 
+	 * <p>When the context environment factors is set, no other environments can be explicitly used.
+	 * 
+	 * @param ctx The context environment factory.
+	 */
 	protected static void initializeContextEnvironment(ExecutionEnvironmentFactory ctx) {
-		contextEnvironmentFactory = ctx;
-	}
-	
-	protected static boolean isContextEnvironmentSet() {
-		return contextEnvironmentFactory != null;
-	}
-	
-	protected static void enableLocalExecution(boolean enabled) {
-		allowLocalExecution = enabled;
-	}
-	
-	public static boolean localExecutionIsAllowed() {
-		return allowLocalExecution;
+		contextEnvironmentFactory = Preconditions.checkNotNull(ctx);
 	}
 
+	/**
+	 * Un-sets the context environment factory. After this method is called, the call to
+	 * {@link #getExecutionEnvironment()} will again return a default local execution environment, and
+	 * it is possible to explicitly instantiate the LocalEnvironment and the RemoteEnvironment.
+	 */
+	protected static void resetContextEnvironment() {
+		contextEnvironmentFactory = null;
+	}
+
+	/**
+	 * Checks whether it is currently permitted to explicitly instantiate a LocalEnvironment
+	 * or a RemoteEnvironment.
+	 * 
+	 * @return True, if it is possible to explicitly instantiate a LocalEnvironment or a
+	 *         RemoteEnvironment, false otherwise.
+	 */
+	public static boolean areExplicitEnvironmentsAllowed() {
+		return contextEnvironmentFactory == null;
+	}
 }

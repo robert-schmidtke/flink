@@ -16,30 +16,28 @@
  * limitations under the License.
  */
 
-package org.apache.flink.stormcompatibility.wordcount;
+package org.apache.flink.streaming.api.functions.windowing;
 
-import org.apache.flink.stormcompatibility.api.StormTestBase;
-import org.apache.flink.test.testdata.WordCountData;
+import org.apache.flink.api.common.functions.Function;
+import org.apache.flink.streaming.api.windowing.windows.Window;
+import org.apache.flink.util.Collector;
 
-public class BoltTokenizerWordCountPojoITCase extends StormTestBase {
+import java.io.Serializable;
 
-	protected String textPath;
-	protected String resultPath;
+/**
+ * Base interface for functions that are evaluated over non-keyed windows.
+ *
+ * @param <IN> The type of the input value.
+ * @param <OUT> The type of the output value.
+ */
+public interface WindowFunction<IN, OUT,  W extends Window> extends Function, Serializable {
 
-	@Override
-	protected void preSubmit() throws Exception {
-		this.textPath = this.createTempFile("text.txt", WordCountData.TEXT);
-		this.resultPath = this.getTempDirPath("result");
-	}
-
-	@Override
-	protected void postSubmit() throws Exception {
-		compareResultsByLinesInMemory(WordCountData.STREAMING_COUNTS_AS_TUPLES, this.resultPath);
-	}
-
-	@Override
-	protected void testProgram() throws Exception {
-		BoltTokenizerWordCountPojo.main(new String[]{this.textPath, this.resultPath});
-	}
-
+	/**
+	 * 
+	 * @param values
+	 * @param out
+	 * 
+	 * @throws Exception The function may throw exceptions to fail the program and trigger recovery. 
+	 */
+	void evaluate(W window, Iterable<IN> values, Collector<OUT> out) throws Exception;
 }

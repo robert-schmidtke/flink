@@ -58,7 +58,7 @@ public class IPv6HostnamesITCase extends TestLogger {
 
 		final Inet6Address ipv6address = getLocalIPv6Address();
 		if (ipv6address == null) {
-			System.err.println("--- Cannot find a non-loopback local IPv6 address, skipping IPv6HostnamesITCase");
+			System.err.println("--- Cannot find a non-loopback local IPv6 address that Akka/Netty can bind to; skipping IPv6HostnamesITCase");
 			return;
 		}
 
@@ -80,7 +80,9 @@ public class IPv6HostnamesITCase extends TestLogger {
 			flink.start();
 
 			ExecutionEnvironment env = ExecutionEnvironment.createRemoteEnvironment(addressString, flink.getLeaderRPCPort());
-
+			env.setParallelism(4);
+			env.getConfig().disableSysoutLogging();
+			
 			// get input data
 			DataSet<String> text = env.fromElements(WordCountData.TEXT.split("\n"));
 
