@@ -17,6 +17,14 @@
 #  limitations under the License.
 ################################################################################
 
+# Stop a Flink cluster on Slurm
+USAGE="Usage: srun --nodes=1-1 --nodelist=<MASTER> stop-slurm.sh"
+
+if [[ -z $SLURM_JOB_ID ]]; then
+    echo "No Slurm environment detected. $USAGE"
+    exit 1
+fi
+
 bin=`dirname "$0"`
 bin=`cd "$bin"; pwd`
 

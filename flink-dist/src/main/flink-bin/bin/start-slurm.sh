@@ -20,7 +20,12 @@
 ### This script is basically start-cluster.sh with srun for ssh and some configuration ###
 
 # Start a Flink cluster on Slurm in batch or streaming mode
-USAGE="Usage: flink-slurm-start.sh [batch|streaming]"
+USAGE="Usage: srun --nodes=1-1 --nodelist=<MASTER> start-slurm.sh [batch|streaming]"
+
+if [[ -z $SLURM_JOB_ID ]]; then
+    echo "No Slurm environment detected. $USAGE"
+    exit 1
+fi
 
 STREAMING_MODE=$1
 
