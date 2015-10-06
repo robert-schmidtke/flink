@@ -451,11 +451,13 @@ public abstract class FileInputFormat<OT> extends RichInputFormat<OT, FileInputS
 
 		if (pathFile.isDir()) {
 			totalLength += addFilesInDir(path, files, true);
+			LOG.debug(path.getName() + " is a directory of size " + totalLength);
 		} else {
 			testForUnsplittable(pathFile);
 
 			files.add(pathFile);
 			totalLength += pathFile.getLen();
+			LOG.debug(path.getName() + " is an unsplittable: " + unsplittable + " file of size " + totalLength);
 		}
 		// returns if unsplittable
 		if(unsplittable) {
@@ -474,6 +476,7 @@ public abstract class FileInputFormat<OT> extends RichInputFormat<OT, FileInputS
 						hosts.toArray(new String[hosts.size()]));
 				inputSplits.add(fis);
 			}
+			LOG.debug(splitNum + " splits for unsplittable file " + filePath.getName());
 			return inputSplits.toArray(new FileInputSplit[inputSplits.size()]);
 		}
 		
@@ -527,6 +530,8 @@ public abstract class FileInputFormat<OT> extends RichInputFormat<OT, FileInputS
 					// adjust the positions
 					position += splitSize;
 					bytesUnassigned -= splitSize;
+					LOG.debug("Created split " + splitNum + " for file " + file.getPath().getName()
+							+ " with hosts " + Arrays.toString(blocks[blockIndex].getHosts()));
 				}
 
 				// assign the last split
@@ -535,6 +540,8 @@ public abstract class FileInputFormat<OT> extends RichInputFormat<OT, FileInputS
 					final FileInputSplit fis = new FileInputSplit(splitNum++, file.getPath(), position,
 						bytesUnassigned, blocks[blockIndex].getHosts());
 					inputSplits.add(fis);
+					LOG.debug("Created split " + splitNum + " for file " + file.getPath().getName()
+							+ " with hosts " + Arrays.toString(blocks[blockIndex].getHosts()));
 				}
 			} else {
 				// special case with a file of zero bytes size
