@@ -39,13 +39,18 @@ import org.apache.flink.streaming.util.StreamingMultipleProgramsTestBase;
 import org.apache.flink.streaming.util.TestListResultSink;
 import org.apache.flink.streaming.util.TestStreamEnvironment;
 import org.apache.flink.util.Collector;
+import org.junit.Ignore;
 import org.junit.Test;
 
 public class SelfConnectionTest extends StreamingMultipleProgramsTestBase {
 
 	private static List<String> expected;
 
+	/**
+	 * TODO: enable once new join operator is implemented
+	 */
 	@SuppressWarnings({ "unchecked", "rawtypes" })
+	@Ignore
 	@Test
 	public void sameDataStreamTest() {
 
@@ -179,7 +184,7 @@ public class SelfConnectionTest extends StreamingMultipleProgramsTestBase {
 			public void flatMap(Integer value, Collector<String> out) throws Exception {
 				out.collect("x " + value);
 			}
-		}).groupBy(new KeySelector<String, Integer>() {
+		}).keyBy(new KeySelector<String, Integer>() {
 
 			private static final long serialVersionUID = 1L;
 
@@ -197,7 +202,7 @@ public class SelfConnectionTest extends StreamingMultipleProgramsTestBase {
 			public Long map(Integer value) throws Exception {
 				return Long.valueOf(value + 1);
 			}
-		}).groupBy(new KeySelector<Long, Long>() {
+		}).keyBy(new KeySelector<Long, Long>() {
 
 			private static final long serialVersionUID = 1L;
 

@@ -20,7 +20,7 @@ package org.apache.flink.streaming.runtime.operators.windowing;
 import com.google.common.annotations.VisibleForTesting;
 import org.apache.flink.api.java.functions.KeySelector;
 import org.apache.flink.api.java.tuple.Tuple2;
-import org.apache.flink.streaming.api.functions.windowing.KeyedWindowFunction;
+import org.apache.flink.streaming.api.functions.windowing.WindowFunction;
 import org.apache.flink.streaming.api.windowing.assigners.WindowAssigner;
 import org.apache.flink.streaming.runtime.operators.windowing.buffers.EvictingWindowBuffer;
 import org.apache.flink.streaming.runtime.operators.windowing.buffers.WindowBuffer;
@@ -33,6 +33,18 @@ import org.slf4j.LoggerFactory;
 
 import java.util.Map;
 
+/**
+ * A {@link WindowOperator} that also allows an {@link Evictor} to be used.
+ *
+ * <p>
+ * The {@code Evictor} is used to evict elements from panes before processing a window and after
+ * a {@link Trigger} has fired.
+ *
+ * @param <K> The type of key returned by the {@code KeySelector}.
+ * @param <IN> The type of the incoming elements.
+ * @param <OUT> The type of elements emitted by the {@code WindowFunction}.
+ * @param <W> The type of {@code Window} that the {@code WindowAssigner} assigns.
+ */
 public class EvictingWindowOperator<K, IN, OUT, W extends Window> extends WindowOperator<K, IN, OUT, W> {
 
 	private static final long serialVersionUID = 1L;
@@ -44,7 +56,7 @@ public class EvictingWindowOperator<K, IN, OUT, W extends Window> extends Window
 	public EvictingWindowOperator(WindowAssigner<? super IN, W> windowAssigner,
 			KeySelector<IN, K> keySelector,
 			WindowBufferFactory<? super IN, ? extends EvictingWindowBuffer<IN>> windowBufferFactory,
-			KeyedWindowFunction<IN, OUT, K, W> windowFunction,
+			WindowFunction<IN, OUT, K, W> windowFunction,
 			Trigger<? super IN, ? super W> trigger,
 			Evictor<? super IN, ? super W> evictor) {
 		super(windowAssigner, keySelector, windowBufferFactory, windowFunction, trigger);
@@ -87,7 +99,7 @@ public class EvictingWindowOperator<K, IN, OUT, W extends Window> extends Window
 
 		windowBuffer.removeElements(toEvict);
 
-		userFunction.evaluate(key,
+		userFunction.apply(key,
 				window,
 				bufferAndTrigger.f0.getUnpackedElements(),
 				timestampedCollector);

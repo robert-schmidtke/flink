@@ -44,9 +44,9 @@ import org.apache.flink.api.java.typeutils.TypeExtractor;
 import org.apache.flink.core.fs.FileSystem.WriteMode;
 import org.apache.flink.core.fs.Path;
 import org.apache.flink.streaming.api.collector.selector.OutputSelector;
-import org.apache.flink.streaming.api.datastream.temporal.StreamCrossOperator;
 import org.apache.flink.streaming.api.datastream.temporal.StreamJoinOperator;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.streaming.api.functions.TimestampExtractor;
 import org.apache.flink.streaming.api.functions.sink.FileSinkFunctionByMillis;
 import org.apache.flink.streaming.api.functions.sink.PrintSinkFunction;
 import org.apache.flink.streaming.api.functions.sink.SinkFunction;
@@ -76,6 +76,7 @@ import org.apache.flink.streaming.api.windowing.time.AbstractTime;
 import org.apache.flink.streaming.api.windowing.time.EventTime;
 import org.apache.flink.streaming.api.windowing.windows.TimeWindow;
 import org.apache.flink.streaming.api.windowing.windows.Window;
+import org.apache.flink.streaming.runtime.operators.ExtractTimestampsOperator;
 import org.apache.flink.streaming.runtime.partitioner.BroadcastPartitioner;
 import org.apache.flink.streaming.runtime.partitioner.CustomPartitionerWrapper;
 import org.apache.flink.streaming.runtime.partitioner.ForwardPartitioner;
@@ -203,43 +204,43 @@ public class DataStream<T> {
 	/**
 	 * Operator used for directing tuples to specific named outputs using an
 	 * {@link org.apache.flink.streaming.api.collector.selector.OutputSelector}.
-	 * Calling this method on an operator creates a new {@link SplitDataStream}.
+	 * Calling this method on an operator creates a new {@link SplitStream}.
 	 * 
 	 * @param outputSelector
 	 *            The user defined
 	 *            {@link org.apache.flink.streaming.api.collector.selector.OutputSelector}
 	 *            for directing the tuples.
-	 * @return The {@link SplitDataStream}
+	 * @return The {@link SplitStream}
 	 */
-	public SplitDataStream<T> split(OutputSelector<T> outputSelector) {
-		return new SplitDataStream<T>(this, clean(outputSelector));
+	public SplitStream<T> split(OutputSelector<T> outputSelector) {
+		return new SplitStream<T>(this, clean(outputSelector));
 	}
 
 	/**
-	 * Creates a new {@link ConnectedDataStream} by connecting
+	 * Creates a new {@link ConnectedStreams} by connecting
 	 * {@link DataStream} outputs of (possible) different types with each other.
 	 * The DataStreams connected using this operator can be used with
 	 * CoFunctions to apply joint transformations.
 	 * 
 	 * @param dataStream
 	 *            The DataStream with which this stream will be connected.
-	 * @return The {@link ConnectedDataStream}.
+	 * @return The {@link ConnectedStreams}.
 	 */
-	public <R> ConnectedDataStream<T, R> connect(DataStream<R> dataStream) {
-		return new ConnectedDataStream<T, R>(environment, this, dataStream);
+	public <R> ConnectedStreams<T, R> connect(DataStream<R> dataStream) {
+		return new ConnectedStreams<T, R>(environment, this, dataStream);
 	}
 
 	/**
 	 * 
-	 * It creates a new {@link KeyedDataStream} that uses the provided key for partitioning
+	 * It creates a new {@link KeyedStream} that uses the provided key for partitioning
 	 * its operator states. 
 	 *
 	 * @param key
 	 *            The KeySelector to be used for extracting the key for partitioning
-	 * @return The {@link DataStream} with partitioned state (i.e. KeyedDataStream)
+	 * @return The {@link DataStream} with partitioned state (i.e. KeyedStream)
 	 */
-	public <K> KeyedDataStream<T, K> keyBy(KeySelector<T, K> key){
-		return new KeyedDataStream<T, K>(this, clean(key));
+	public <K> KeyedStream<T, K> keyBy(KeySelector<T, K> key){
+		return new KeyedStream<T, K>(this, clean(key));
 	}
 
 	/**
@@ -248,9 +249,9 @@ public class DataStream<T> {
 	 * @param fields
 	 *            The position of the fields on which the {@link DataStream}
 	 *            will be grouped.
-	 * @return The {@link DataStream} with partitioned state (i.e. KeyedDataStream)
+	 * @return The {@link DataStream} with partitioned state (i.e. KeyedStream)
 	 */
-	public KeyedDataStream<T, Tuple> keyBy(int... fields) {
+	public KeyedStream<T, Tuple> keyBy(int... fields) {
 		if (getType() instanceof BasicArrayTypeInfo || getType() instanceof PrimitiveArrayTypeInfo) {
 			return keyBy(new KeySelectorUtil.ArrayKeySelector<T>(fields));
 		} else {
@@ -267,77 +268,15 @@ public class DataStream<T> {
 	 * @param fields
 	 *            One or more field expressions on which the state of the {@link DataStream} operators will be
 	 *            partitioned.
-	 * @return The {@link DataStream} with partitioned state (i.e. KeyedDataStream)
+	 * @return The {@link DataStream} with partitioned state (i.e. KeyedStream)
 	 **/
-	public KeyedDataStream<T, Tuple> keyBy(String... fields) {
+	public KeyedStream<T, Tuple> keyBy(String... fields) {
 		return keyBy(new Keys.ExpressionKeys<T>(fields, getType()));
 	}
 
-	private KeyedDataStream<T, Tuple> keyBy(Keys<T> keys) {
-		return new KeyedDataStream<T, Tuple>(this, clean(KeySelectorUtil.getSelectorForKeys(keys,
+	private KeyedStream<T, Tuple> keyBy(Keys<T> keys) {
+		return new KeyedStream<T, Tuple>(this, clean(KeySelectorUtil.getSelectorForKeys(keys,
 				getType(), getExecutionConfig())));
-	}
-	
-	/**
-	 * Partitions the operator state of a {@link DataStream} by the given key positions. 
-	 * Mind that keyBy does not affect the partitioning of the {@link DataStream}
-	 * but only the way explicit state is partitioned among parallel instances.
-	 * 
-	 * @param fields
-	 *            The position of the fields on which the states of the {@link DataStream}
-	 *            will be partitioned.
-	 * @return The {@link DataStream} with partitioned state (i.e. KeyedDataStream)
-	 */
-	public GroupedDataStream<T, Tuple> groupBy(int... fields) {
-		if (getType() instanceof BasicArrayTypeInfo || getType() instanceof PrimitiveArrayTypeInfo) {
-			return groupBy(new KeySelectorUtil.ArrayKeySelector<T>(fields));
-		} else {
-			return groupBy(new Keys.ExpressionKeys<T>(fields, getType()));
-		}
-	}
-
-	/**
-	 * Groups a {@link DataStream} using field expressions. A field expression
-	 * is either the name of a public field or a getter method with parentheses
-	 * of the {@link DataStream}S underlying type. A dot can be used to drill
-	 * down into objects, as in {@code "field1.getInnerField2()" }. This method
-	 * returns an {@link GroupedDataStream}.
-	 *
-	 * <p>
-	 * This operator also affects the
-	 * partitioning of the stream, by forcing values with the same key to go to
-	 * the same processing instance.
-	 * 
-	 * @param fields
-	 *            One or more field expressions on which the DataStream will be
-	 *            grouped.
-	 * @return The grouped {@link DataStream}
-	 **/
-	public GroupedDataStream<T, Tuple> groupBy(String... fields) {
-		return groupBy(new Keys.ExpressionKeys<T>(fields, getType()));
-	}
-
-	/**
-	 * Groups the elements of a {@link DataStream} by the key extracted by the
-	 * {@link KeySelector} to be used with grouped operators like
-	 * {@link GroupedDataStream#reduce(org.apache.flink.api.common.functions.ReduceFunction)}.
-	 *
-	 * <p/>
-	 * This operator also affects the partitioning of the stream, by forcing
-	 * values with the same key to go to the same processing instance.
-	 * 
-	 * @param keySelector
-	 *            The {@link KeySelector} that will be used to extract keys for
-	 *            the values
-	 * @return The grouped {@link DataStream}
-	 */
-	public <K> GroupedDataStream<T, K> groupBy(KeySelector<T, K> keySelector) {
-		return new GroupedDataStream<T, K>(this, clean(keySelector));
-	}
-
-	private GroupedDataStream<T, Tuple> groupBy(Keys<T> keys) {
-		return new GroupedDataStream<T, Tuple>(this, 
-				clean(KeySelectorUtil.getSelectorForKeys(keys, getType(), getExecutionConfig())));
 	}
 
 	/**
@@ -528,14 +467,14 @@ public class DataStream<T> {
 	/**
 	 * Initiates an iterative part of the program that feeds back data streams.
 	 * The iterative part needs to be closed by calling
-	 * {@link IterativeDataStream#closeWith(DataStream)}. The transformation of
-	 * this IterativeDataStream will be the iteration head. The data stream
-	 * given to the {@link IterativeDataStream#closeWith(DataStream)} method is
+	 * {@link IterativeStream#closeWith(DataStream)}. The transformation of
+	 * this IterativeStream will be the iteration head. The data stream
+	 * given to the {@link IterativeStream#closeWith(DataStream)} method is
 	 * the data stream that will be fed back and used as the input for the
 	 * iteration head. The user can also use different feedback type than the
 	 * input of the iteration and treat the input and feedback streams as a
-	 * {@link ConnectedDataStream} be calling
-	 * {@link IterativeDataStream#withFeedbackType(TypeInformation)}
+	 * {@link ConnectedStreams} be calling
+	 * {@link IterativeStream#withFeedbackType(TypeInformation)}
 	 * <p>
 	 * A common usage pattern for streaming iterations is to use output
 	 * splitting to send a part of the closing data stream to the head. Refer to
@@ -543,7 +482,7 @@ public class DataStream<T> {
 	 * <p>
 	 * The iteration edge will be partitioned the same way as the first input of
 	 * the iteration head unless it is changed in the
-	 * {@link IterativeDataStream#closeWith(DataStream)} call.
+	 * {@link IterativeStream#closeWith(DataStream)} call.
 	 * <p>
 	 * By default a DataStream with iteration will never terminate, but the user
 	 * can use the maxWaitTime parameter to set a max waiting time for the
@@ -552,21 +491,21 @@ public class DataStream<T> {
 	 * 
 	 * @return The iterative data stream created.
 	 */
-	public IterativeDataStream<T> iterate() {
-		return new IterativeDataStream<T>(this, 0);
+	public IterativeStream<T> iterate() {
+		return new IterativeStream<T>(this, 0);
 	}
 
 	/**
 	 * Initiates an iterative part of the program that feeds back data streams.
 	 * The iterative part needs to be closed by calling
-	 * {@link IterativeDataStream#closeWith(DataStream)}. The transformation of
-	 * this IterativeDataStream will be the iteration head. The data stream
-	 * given to the {@link IterativeDataStream#closeWith(DataStream)} method is
+	 * {@link IterativeStream#closeWith(DataStream)}. The transformation of
+	 * this IterativeStream will be the iteration head. The data stream
+	 * given to the {@link IterativeStream#closeWith(DataStream)} method is
 	 * the data stream that will be fed back and used as the input for the
 	 * iteration head. The user can also use different feedback type than the
 	 * input of the iteration and treat the input and feedback streams as a
-	 * {@link ConnectedDataStream} be calling
-	 * {@link IterativeDataStream#withFeedbackType(TypeInformation)}
+	 * {@link ConnectedStreams} be calling
+	 * {@link IterativeStream#withFeedbackType(TypeInformation)}
 	 * <p>
 	 * A common usage pattern for streaming iterations is to use output
 	 * splitting to send a part of the closing data stream to the head. Refer to
@@ -574,7 +513,7 @@ public class DataStream<T> {
 	 * <p>
 	 * The iteration edge will be partitioned the same way as the first input of
 	 * the iteration head unless it is changed in the
-	 * {@link IterativeDataStream#closeWith(DataStream)} call.
+	 * {@link IterativeStream#closeWith(DataStream)} call.
 	 * <p>
 	 * By default a DataStream with iteration will never terminate, but the user
 	 * can use the maxWaitTime parameter to set a max waiting time for the
@@ -587,8 +526,8 @@ public class DataStream<T> {
 	 * 
 	 * @return The iterative data stream created.
 	 */
-	public IterativeDataStream<T> iterate(long maxWaitTimeMillis) {
-		return new IterativeDataStream<T>(this, maxWaitTimeMillis);
+	public IterativeStream<T> iterate(long maxWaitTimeMillis) {
+		return new IterativeStream<T>(this, maxWaitTimeMillis);
 	}
 
 	/**
@@ -676,32 +615,6 @@ public class DataStream<T> {
 	 */
 	public <R extends Tuple> SingleOutputStreamOperator<R, ?> project(int... fieldIndexes) {
 		return new StreamProjection<T>(this, fieldIndexes).projectTupleX();
-	}
-
-
-	/**
-	 * Initiates a temporal Cross transformation.<br/>
-	 * A Cross transformation combines the elements of two {@link DataStream}s
-	 * into one DataStream over a specified time window. It builds all pair
-	 * combinations of elements of both DataStreams, i.e., it builds a Cartesian
-	 * product.
-	 * 
-	 * <p>
-	 * This method returns a {@link StreamCrossOperator} on which the
-	 * {@link StreamCrossOperator#onWindow} should be called to define the
-	 * window.
-	 * <p>
-	 * Call {@link StreamCrossOperator.CrossWindow#with(org.apache.flink.api.common.functions.CrossFunction)}
-	 * to define a custom cross function.
-	 * 
-	 * @param dataStreamToCross
-	 *            The other DataStream with which this DataStream is crossed.
-	 * @return A {@link StreamCrossOperator} to continue the definition of the
-	 *         cross transformation.
-	 * 
-	 */
-	public <IN2> StreamCrossOperator<T, IN2> cross(DataStream<IN2> dataStreamToCross) {
-		return new StreamCrossOperator<T, IN2>(this, dataStreamToCross);
 	}
 
 	/**
@@ -814,7 +727,7 @@ public class DataStream<T> {
 	}
 
 	/**
-	 * Windows this {@code KeyedDataStream} into tumbling time windows.
+	 * Windows this {@code DataStream} into tumbling time windows.
 	 *
 	 * <p>
 	 * This is a shortcut for either {@code .window(TumblingTimeWindows.of(size))} or
@@ -824,18 +737,18 @@ public class DataStream<T> {
 	 *
 	 * @param size The size of the window.
 	 */
-	public NonParallelWindowDataStream<T, TimeWindow> timeWindowAll(AbstractTime size) {
+	public AllWindowedStream<T, TimeWindow> timeWindowAll(AbstractTime size) {
 		AbstractTime actualSize = size.makeSpecificBasedOnTimeCharacteristic(environment.getStreamTimeCharacteristic());
 
 		if (actualSize instanceof EventTime) {
-			return windowAll(TumblingTimeWindows.of(actualSize.toMilliseconds()));
+			return windowAll(TumblingTimeWindows.of(actualSize));
 		} else {
-			return windowAll(TumblingProcessingTimeWindows.of(actualSize.toMilliseconds()));
+			return windowAll(TumblingProcessingTimeWindows.of(actualSize));
 		}
 	}
 
 	/**
-	 * Windows this {@code KeyedDataStream} into sliding time windows.
+	 * Windows this {@code DataStream} into sliding time windows.
 	 *
 	 * <p>
 	 * This is a shortcut for either {@code .window(SlidingTimeWindows.of(size, slide))} or
@@ -845,16 +758,14 @@ public class DataStream<T> {
 	 *
 	 * @param size The size of the window.
 	 */
-	public NonParallelWindowDataStream<T, TimeWindow> timeWindowAll(AbstractTime size, AbstractTime slide) {
+	public AllWindowedStream<T, TimeWindow> timeWindowAll(AbstractTime size, AbstractTime slide) {
 		AbstractTime actualSize = size.makeSpecificBasedOnTimeCharacteristic(environment.getStreamTimeCharacteristic());
 		AbstractTime actualSlide = slide.makeSpecificBasedOnTimeCharacteristic(environment.getStreamTimeCharacteristic());
 
 		if (actualSize instanceof EventTime) {
-			return windowAll(SlidingTimeWindows.of(actualSize.toMilliseconds(),
-					actualSlide.toMilliseconds()));
+			return windowAll(SlidingTimeWindows.of(size, slide));
 		} else {
-			return windowAll(SlidingProcessingTimeWindows.of(actualSize.toMilliseconds(),
-					actualSlide.toMilliseconds()));
+			return windowAll(SlidingProcessingTimeWindows.of(actualSize, actualSlide));
 		}
 	}
 
@@ -877,8 +788,32 @@ public class DataStream<T> {
 	 * @param assigner The {@code WindowAssigner} that assigns elements to windows.
 	 * @return The trigger windows data stream.
 	 */
-	public <W extends Window> NonParallelWindowDataStream<T, W> windowAll(WindowAssigner<? super T, W> assigner) {
-		return new NonParallelWindowDataStream<>(this, assigner);
+	public <W extends Window> AllWindowedStream<T, W> windowAll(WindowAssigner<? super T, W> assigner) {
+		return new AllWindowedStream<>(this, assigner);
+	}
+
+	/**
+	 * Extracts a timestamp from an element and assigns it as the internal timestamp of that element.
+	 * The internal timestamps are, for example, used to to event-time window operations.
+	 *
+	 * <p>
+	 * If you know that the timestamps are strictly increasing you can use an
+	 * {@link org.apache.flink.streaming.api.functions.AscendingTimestampExtractor}. Otherwise,
+	 * you should provide a {@link TimestampExtractor} that also implements
+	 * {@link TimestampExtractor#getCurrentWatermark()} to keep track of watermarks.
+	 *
+	 * @see org.apache.flink.streaming.api.watermark.Watermark
+	 *
+	 * @param extractor The TimestampExtractor that is called for each element of the DataStream.
+	 */
+	public SingleOutputStreamOperator<T, ?> extractTimestamp(TimestampExtractor<T> extractor) {
+		// match parallelism to input, otherwise dop=1 sources could lead to some strange
+		// behaviour: the watermark will creep along very slowly because the elements
+		// from the source go to each extraction operator round robin.
+		int inputParallelism = getTransformation().getParallelism();
+		ExtractTimestampsOperator<T> operator = new ExtractTimestampsOperator<>(clean(extractor));
+		return transform("ExtractTimestamps", getTransformation().getOutputType(), operator)
+				.setParallelism(inputParallelism);
 	}
 
 	/**

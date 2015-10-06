@@ -627,7 +627,7 @@ dataStream.filter{ _ != 0 }
 	<br/>
 	A map that produces a rolling average per key:</p>
 {% highlight scala %}
-dataStream.keyBy(..).mapWithState((in, state: Option[(Long, Int)]) => state match {
+dataStream.groupBy(..).mapWithState((in, state: Option[(Long, Int)]) => state match {
 	case Some((sum, count)) => ((sum + in)/(count + 1), Some((sum + in, count + 1)))
 	case None => (in, Some((in, 1)))
 })
@@ -713,7 +713,7 @@ dataStream.union(otherStream1, otherStream2, …)
 
 ### Grouped operators
 
-Some transformations require that the elements of a `DataStream` are grouped on some key. The user can create a `GroupedDataStream` by calling the `groupBy(key)` method of a non-grouped `DataStream`. 
+Some transformations require that the elements of a `DataStream` are grouped on some key. The user can create a `GroupedDataStream` by calling the `groupBy(key)` method of a non-grouped `DataStream`.
 Keys can be of three types: field positions (applicable for tuple/array types), field expressions (applicable for pojo types), KeySelector instances.
 
 Aggregation or reduce operators called on `GroupedDataStream`s produce elements on a per group basis.
@@ -991,9 +991,9 @@ dataStream1 cross dataStream2 onWindow (windowing_params)
 ### Co operators
 
 Co operators allow the users to jointly transform two `DataStream`s of different types, providing a simple way to jointly manipulate streams with a shared state. It is designed to support joint stream transformations where union is not appropriate due to different data types, or in case the user needs explicit tracking of the origin of individual elements.
-Co operators can be applied to `ConnectedDataStream`s which represent two `DataStream`s of possibly different types. A `ConnectedDataStream` can be created by calling the `connect(otherDataStream)` method of a `DataStream`.
+Co operators can be applied to `ConnectedStreams` which represent two `DataStream`s of possibly different types. `ConnectedStreams` can be created by calling the `connect(otherDataStream)` method of a `DataStream`.
 
-#### Map on ConnectedDataStream
+#### Map on ConnectedStreams
 Applies a CoMap transformation on two separate DataStreams, mapping them to a common output type. The transformation calls a `CoMapFunction.map1()` for each element of the first input and `CoMapFunction.map2()` for each element of the second input. Each CoMapFunction call returns exactly one element.
 A CoMap operator that outputs true if an Integer value is received and false if a String value is received:
 
@@ -1032,8 +1032,8 @@ val dataStream2 : DataStream[String] = ...
 </div>
 </div>
 
-#### FlatMap on ConnectedDataStream
-The FlatMap operator for the `ConnectedDataStream` works similarly to CoMap, but instead of returning exactly one element after each map call the user can output arbitrarily many values using the Collector interface. 
+#### FlatMap on ConnectedStreams
+The FlatMap operator for `ConnectedStreams` works similarly to CoMap, but instead of returning exactly one element after each map call the user can output arbitrarily many values using the Collector interface.
 
 <div class="codetabs" markdown="1">
 <div data-lang="java" markdown="1">
@@ -1072,11 +1072,11 @@ val dataStream2 : DataStream[String] = ...
 </div>
 </div>
 
-#### WindowReduce on ConnectedDataStream
+#### WindowReduce on ConnectedStreams
 The windowReduce operator applies a user defined `CoWindowFunction` to time aligned windows of the two data streams and return zero or more elements of an arbitrary type. The user can define the window and slide intervals and can also implement custom timestamps to be used for calculating windows.
 
-#### Reduce on ConnectedDataStream
-The Reduce operator for the `ConnectedDataStream` applies a group-reduce transformation on the grouped joined data streams and then maps the reduced elements to a common output type. It works only for connected data streams where the inputs are grouped.
+#### Reduce on ConnectedStreams
+The Reduce operator for `ConnectedStreams` applies a group-reduce transformation on the grouped joined data streams and then maps the reduced elements to a common output type. It works only for connected data streams where the inputs are grouped.
 
 ### Output splitting
 <div class="codetabs" markdown="1">
@@ -1188,7 +1188,7 @@ To use this functionality the user needs to add the maxWaitTimeMillis parameter 
 By default the partitioning of the feedback stream will be automatically set to be the same as the input of the iteration head. To override this the user can set an optional boolean flag in the `closeWith` method. 
 
 #### Iteration head as a co-operator
-The user can also treat the input and feedback stream of a streaming iteration as a `ConnectedDataStream`. This can be used to distinguish the feedback tuples and also to change the type of the iteration feedback. 
+The user can also treat the input and feedback stream of a streaming iteration as `ConnectedStreams`. This can be used to distinguish the feedback tuples and also to change the type of the iteration feedback.
 
 To use this feature the user needs to call the `withFeedbackType(type)` method of the iterative data stream and pass the type of the feedback stream:
 
@@ -1224,13 +1224,13 @@ To use this functionality the user needs to add the maxWaitTimeMillis parameter 
 By default the partitioning of the feedback stream will be automatically set to be the same as the input of the iteration head. To override this the user can set an optional boolean flag in the `iterate` method. 
 
 #### Iteration head as a co-operator
-The user can also treat the input and feedback stream of a streaming iteration as a `ConnectedDataStream`. This can be used to distinguish the feedback tuples and also to change the type of the iteration feedback. 
+The user can also treat the input and feedback stream of a streaming iteration as `ConnectedStreams`. This can be used to distinguish the feedback tuples and also to change the type of the iteration feedback.
 
-To use this feature the user needs to call implement a step function that operates on a `ConnectedDataStream` and pass it to the `iterate(…)` call.
+To use this feature the user needs to call implement a step function that operates on `ConnectedStreams` and pass it to the `iterate(…)` call.
 
 {% highlight scala %}
 val iteratedStream = someDataStream.iterate(
-			stepFunction: ConnectedDataStream[T, F] => (DataStream[F], DataStream[R]), 
+			stepFunction: ConnectedStreams[T, F] => (DataStream[F], DataStream[R]),
 			maxWaitTimeMillis)
 {% endhighlight %}
 
@@ -1313,7 +1313,7 @@ Checkpointing of the states needs to be enabled from the `StreamExecutionEnviron
 
 Operator states can be accessed from the `RuntimeContext` using the `getOperatorState(“name”, defaultValue, partitioned)` method so it is only accessible in `RichFunction`s. A recommended usage pattern is to retrieve the operator state in the `open(…)` method of the operator and set it as a field in the operator instance for runtime usage. Multiple `OperatorState`s can be used simultaneously by the same operator by using different names to identify them.
 
-Partitioned operator state works only on `KeyedDataStreams`. A `KeyedDataStream` can be created from `DataStream` using the `keyBy` or `groupBy` methods. The `keyBy` method simply takes a `KeySelector` to derive the keys by which the operator state will be partitioned, however, it does not affect the actual partitioning of the `DataStream` records. If data partitioning is also desired then the `groupBy`  method should be used instead to create a `GroupedDataStream` which is a subtype of `KeyedDataStream`. Mind that `KeyedDataStreams` do not support repartitioning (e.g. `shuffle(), forward(), groupBy(...)`).
+Partitioned operator state works only on `KeyedDataStreams`. A `KeyedDataStream` can be created from `DataStream` using the `groupBy` or `groupBy` methods. The `groupBy` method simply takes a `KeySelector` to derive the keys by which the operator state will be partitioned, however, it does not affect the actual partitioning of the `DataStream` records. If data partitioning is also desired then the `groupBy`  method should be used instead to create a `GroupedDataStream` which is a subtype of `KeyedDataStream`. Mind that `KeyedDataStreams` do not support repartitioning (e.g. `shuffle(), forward(), groupBy(...)`).
 
 By default operator states are checkpointed using default java serialization thus they need to be `Serializable`. The user can gain more control over the state checkpoint mechanism by passing a `StateCheckpointer` instance when retrieving the `OperatorState` from the `RuntimeContext`. The `StateCheckpointer` allows custom implementations for the checkpointing logic for increased efficiency and to store arbitrary non-serializable states.
 

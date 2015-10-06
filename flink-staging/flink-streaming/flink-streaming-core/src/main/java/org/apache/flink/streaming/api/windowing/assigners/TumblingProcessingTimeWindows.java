@@ -17,6 +17,7 @@
  */
 package org.apache.flink.streaming.api.windowing.assigners;
 
+import org.apache.flink.streaming.api.windowing.time.AbstractTime;
 import org.apache.flink.streaming.api.windowing.triggers.ProcessingTimeTrigger;
 import org.apache.flink.streaming.api.windowing.triggers.Trigger;
 import org.apache.flink.streaming.api.windowing.windows.TimeWindow;
@@ -24,6 +25,19 @@ import org.apache.flink.streaming.api.windowing.windows.TimeWindow;
 import java.util.Collection;
 import java.util.Collections;
 
+/**
+ * A {@link WindowAssigner} that windows elements into time-based windows. The windowing is
+ * based on system time. Windows cannot overlap.
+ *
+ * <p>
+ * For example, in order to window into windows of 1 minute, every 10 seconds:
+ * <pre> {@code
+ * DataStream<Tuple2<String, Integer>> in = ...;
+ * KeyedStream<String, Tuple2<String, Integer>> keyed = in.keyBy(...);
+ * WindowedStream<Tuple2<String, Integer>, String, TimeWindows> windowed =
+ *   keyed.window(TumblingProcessingTimeWindows.of(Time.of(1, MINUTES), Time.of(10, SECONDS));
+ * } </pre>
+ */
 public class TumblingProcessingTimeWindows extends WindowAssigner<Object, TimeWindow> {
 	private static final long serialVersionUID = 1L;
 
@@ -61,7 +75,7 @@ public class TumblingProcessingTimeWindows extends WindowAssigner<Object, TimeWi
 	 * @param size The size of the generated windows.
 	 * @return The time policy.
 	 */
-	public static TumblingProcessingTimeWindows of(long size) {
-		return new TumblingProcessingTimeWindows(size);
+	public static TumblingProcessingTimeWindows of(AbstractTime size) {
+		return new TumblingProcessingTimeWindows(size.toMilliseconds());
 	}
 }

@@ -25,7 +25,7 @@ import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.core.fs.FileSystem;
 import org.apache.flink.streaming.api.collector.selector.OutputSelector;
 import org.apache.flink.streaming.api.datastream.DataStream;
-import org.apache.flink.streaming.api.datastream.SplitDataStream;
+import org.apache.flink.streaming.api.datastream.SplitStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.streaming.api.functions.source.SourceFunction;
 import org.apache.flink.streaming.util.StreamingMultipleProgramsTestBase;
@@ -77,8 +77,8 @@ public class StreamingOperatorsITCase extends StreamingMultipleProgramsTestBase 
 		StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
 		DataStream<Tuple2<Integer, Integer>> sourceStream = env.addSource(new TupleSource(numElements, numKeys));
 
-		SplitDataStream<Tuple2<Integer, Integer>> splittedResult = sourceStream
-			.groupBy(0)
+		SplitStream<Tuple2<Integer, Integer>> splittedResult = sourceStream
+			.keyBy(0)
 			.fold(0, new FoldFunction<Tuple2<Integer, Integer>, Integer>() {
 				@Override
 				public Integer fold(Integer accumulator, Tuple2<Integer, Integer> value) throws Exception {
@@ -146,7 +146,7 @@ public class StreamingOperatorsITCase extends StreamingMultipleProgramsTestBase 
 		DataStream<Tuple2<Integer, NonSerializable>> input = env.addSource(new NonSerializableTupleSource(numElements));
 
 		input
-			.groupBy(0)
+			.keyBy(0)
 			.fold(
 				new NonSerializable(42),
 				new FoldFunction<Tuple2<Integer, NonSerializable>, NonSerializable>() {

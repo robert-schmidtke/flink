@@ -33,6 +33,7 @@ import org.apache.flink.streaming.api.windowing.helper.Timestamp;
 import org.apache.flink.streaming.util.StreamingMultipleProgramsTestBase;
 import org.apache.flink.streaming.util.TestListResultSink;
 import org.apache.flink.streaming.util.TestStreamEnvironment;
+import org.junit.Ignore;
 import org.junit.Test;
 
 public class WindowCrossJoinTest extends StreamingMultipleProgramsTestBase {
@@ -50,6 +51,11 @@ public class WindowCrossJoinTest extends StreamingMultipleProgramsTestBase {
 		}
 	}
 
+	/**
+	 * TODO: enable once new join operator is ready
+	 * @throws Exception
+	 */
+	@Ignore
 	@Test
 	public void test() throws Exception {
 		StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
@@ -114,23 +120,6 @@ public class WindowCrossJoinTest extends StreamingMultipleProgramsTestBase {
 						new MyTimestamp<Tuple1<Integer>>(), 100).where(0).equalTo(0)
 				.map(new ResultMap())
 				.addSink(joinResultSink);
-
-		inStream1
-				.cross(inStream2)
-				.onWindow(1000, new MyTimestamp<Tuple2<Integer, String>>(),
-						new MyTimestamp<Tuple1<Integer>>(), 100)
-				.with(new CrossFunction<Tuple2<Integer, String>, Tuple1<Integer>, Tuple2<Tuple2<Integer, String>, Tuple1<Integer>>>() {
-
-					private static final long serialVersionUID = 1L;
-
-					@Override
-					public Tuple2<Tuple2<Integer, String>, Tuple1<Integer>> cross(
-							Tuple2<Integer, String> val1, Tuple1<Integer> val2) throws Exception {
-						return new Tuple2<Tuple2<Integer, String>, Tuple1<Integer>>(val1, val2);
-					}
-				})
-				.map(new ResultMap())
-				.addSink(crossResultSink);
 
 		env.execute();
 

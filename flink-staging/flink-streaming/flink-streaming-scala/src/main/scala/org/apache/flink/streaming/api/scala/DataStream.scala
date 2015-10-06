@@ -18,6 +18,12 @@
 
 package org.apache.flink.streaming.api.scala
 
+import org.apache.flink.streaming.api.functions.{AscendingTimestampExtractor, TimestampExtractor}
+import org.apache.flink.streaming.api.windowing.assigners._
+import org.apache.flink.streaming.api.windowing.time.{ProcessingTime, EventTime, AbstractTime}
+import org.apache.flink.streaming.api.windowing.windows.{Window, TimeWindow}
+import org.apache.flink.streaming.api.datastream.{AllWindowedStream => JavaAllWindowedStream}
+
 import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
 
@@ -36,8 +42,8 @@ import org.apache.flink.streaming.api.windowing.policy.{EvictionPolicy, TriggerP
 import org.apache.flink.streaming.util.serialization.SerializationSchema
 import org.apache.flink.util.Collector
 import org.apache.flink.api.common.functions.{RichMapFunction, RichFlatMapFunction, RichFilterFunction}
-import org.apache.flink.streaming.api.datastream.KeyedDataStream
 import org.apache.flink.streaming.api.scala.function.StatefulFunction
+import org.apache.flink.streaming.api.datastream.{KeyedStream => JavaKeyedStream}
 
 class DataStream[T](javaStream: JavaStream[T]) {
 
@@ -201,64 +207,37 @@ class DataStream[T](javaStream: JavaStream[T]) {
     javaStream.union(dataStreams.map(_.getJavaStream): _*)
 
   /**
-   * Creates a new ConnectedDataStream by connecting
+   * Creates a new ConnectedStreams by connecting
    * DataStream outputs of different type with each other. The
    * DataStreams connected using this operators can be used with CoFunctions.
    */
-  def connect[T2](dataStream: DataStream[T2]): ConnectedDataStream[T, T2] = 
+  def connect[T2](dataStream: DataStream[T2]): ConnectedStreams[T, T2] =
     javaStream.connect(dataStream.getJavaStream)
-
-
-
-  /**
-   * Partitions the operator states of the DataStream by the given key positions 
-   * (for tuple/array types).
-   */
-  def keyBy(fields: Int*): DataStream[T] = javaStream.keyBy(fields: _*)
-
-  /**
-   *
-   * Partitions the operator states of the DataStream by the given field expressions.
-   */
-  def keyBy(firstField: String, otherFields: String*): DataStream[T] =
-    javaStream.keyBy(firstField +: otherFields.toArray: _*)
-
-
-  /**
-   * Partitions the operator states of the DataStream by the given K key. 
-   */
-  def keyBy[K: TypeInformation](fun: T => K): DataStream[T] = {
-    val cleanFun = clean(fun)
-    val keyExtractor = new KeySelector[T, K] {
-      def getKey(in: T) = cleanFun(in)
-    }
-    javaStream.keyBy(keyExtractor)
-  }
   
   /**
    * Groups the elements of a DataStream by the given key positions (for tuple/array types) to
    * be used with grouped operators like grouped reduce or grouped aggregations.
    */
-  def groupBy(fields: Int*): GroupedDataStream[T, JavaTuple] = javaStream.groupBy(fields: _*)
+  def keyBy(fields: Int*): KeyedStream[T, JavaTuple] = javaStream.keyBy(fields: _*)
 
   /**
    * Groups the elements of a DataStream by the given field expressions to
    * be used with grouped operators like grouped reduce or grouped aggregations.
    */
-  def groupBy(firstField: String, otherFields: String*): GroupedDataStream[T, JavaTuple] = 
-   javaStream.groupBy(firstField +: otherFields.toArray: _*)   
+  def keyBy(firstField: String, otherFields: String*): KeyedStream[T, JavaTuple] =
+   javaStream.keyBy(firstField +: otherFields.toArray: _*)   
   
   /**
    * Groups the elements of a DataStream by the given K key to
    * be used with grouped operators like grouped reduce or grouped aggregations.
    */
-  def groupBy[K: TypeInformation](fun: T => K): GroupedDataStream[T, K] = {
+  def keyBy[K: TypeInformation](fun: T => K): KeyedStream[T, K] = {
 
     val cleanFun = clean(fun)
     val keyExtractor = new KeySelector[T, K] {
       def getKey(in: T) = cleanFun(in)
     }
-    javaStream.groupBy(keyExtractor)
+    javaStream.keyBy(keyExtractor)
   }
 
   /**
@@ -406,7 +385,7 @@ class DataStream[T](javaStream: JavaStream[T]) {
    * stream of the iterative part.
    * 
    * The input stream of the iterate operator and the feedback stream will be treated
-   * as a ConnectedDataStream where the the input is connected with the feedback stream.
+   * as a ConnectedStreams where the the input is connected with the feedback stream.
    * 
    * This allows the user to distinguish standard input from feedback inputs.
    * 
@@ -418,7 +397,7 @@ class DataStream[T](javaStream: JavaStream[T]) {
    * to 0 then the iteration sources will indefinitely, so the job must be killed to stop.
    *
    */
-  def iterate[R, F: TypeInformation: ClassTag](stepFunction: ConnectedDataStream[T, F] => 
+  def iterate[R, F: TypeInformation: ClassTag](stepFunction: ConnectedStreams[T, F] =>
     (DataStream[F], DataStream[R]), maxWaitTimeMillis:Long): DataStream[R] = {
     val feedbackType: TypeInformation[F] = implicitly[TypeInformation[F]]
     val connectedIterativeStream = javaStream.iterate(maxWaitTimeMillis).
@@ -600,7 +579,7 @@ class DataStream[T](javaStream: JavaStream[T]) {
   }
 
   private[flink] def isStatePartitioned: Boolean = {
-    javaStream.isInstanceOf[KeyedDataStream[_, _]]
+    javaStream.isInstanceOf[JavaKeyedStream[_, _]]
   }
 
   /**
@@ -635,18 +614,130 @@ class DataStream[T](javaStream: JavaStream[T]) {
     javaStream.every(windowingHelper)
 
   /**
+   * Windows this DataStream into tumbling time windows.
+   *
+   * This is a shortcut for either `.window(TumblingTimeWindows.of(size))` or
+   * `.window(TumblingProcessingTimeWindows.of(size))` depending on the time characteristic
+   * set using
+   * [[StreamExecutionEnvironment.setStreamTimeCharacteristic]].
+   *
+   * @param size The size of the window.
+   */
+  def timeWindowAll(size: AbstractTime): AllWindowedStream[T, TimeWindow] = {
+    val env = new StreamExecutionEnvironment(javaStream.getExecutionEnvironment)
+    val actualSize = size.makeSpecificBasedOnTimeCharacteristic(env.getStreamTimeCharacteristic)
+
+    actualSize match {
+      case t: EventTime =>
+        val assigner = TumblingTimeWindows.of(actualSize)
+          .asInstanceOf[WindowAssigner[T, TimeWindow]]
+        windowAll(assigner)
+      case t: ProcessingTime =>
+        val assigner = TumblingProcessingTimeWindows.of(actualSize)
+          .asInstanceOf[WindowAssigner[T, TimeWindow]]
+        windowAll(assigner)
+      case _ => throw new RuntimeException("Invalid time: " + actualSize)
+    }
+  }
+
+  /**
+   * Windows this DataStream into sliding time windows.
+   *
+   * This is a shortcut for either `.window(SlidingTimeWindows.of(size, slide))` or
+   * `.window(SlidingProcessingTimeWindows.of(size, slide))` depending on the time characteristic
+   * set using
+   * [[StreamExecutionEnvironment.setStreamTimeCharacteristic]].
+   *
+   * @param size The size of the window.
+   */
+  def timeWindowAll(size: AbstractTime, slide: AbstractTime): AllWindowedStream[T, TimeWindow] = {
+    val env = new StreamExecutionEnvironment(javaStream.getExecutionEnvironment)
+    val actualSize = size.makeSpecificBasedOnTimeCharacteristic(env.getStreamTimeCharacteristic)
+    val actualSlide = slide.makeSpecificBasedOnTimeCharacteristic(env.getStreamTimeCharacteristic)
+
+    actualSize match {
+      case t: EventTime =>
+        val assigner = SlidingTimeWindows.of(
+          actualSize,
+          actualSlide).asInstanceOf[WindowAssigner[T, TimeWindow]]
+        windowAll(assigner)
+      case t: ProcessingTime =>
+        val assigner = SlidingProcessingTimeWindows.of(
+          actualSize,
+          actualSlide).asInstanceOf[WindowAssigner[T, TimeWindow]]
+        windowAll(assigner)
+      case _ => throw new RuntimeException("Invalid time: " + actualSize)
+    }
+  }
+
+  /**
+   * Windows this data stream to a [[AllWindowedStream]], which evaluates windows
+   * over a key grouped stream. Elements are put into windows by a [[WindowAssigner]]. The grouping
+   * of elements is done both by key and by window.
+   *
+   * A [[org.apache.flink.streaming.api.windowing.triggers.Trigger]] can be defined to specify
+   * when windows are evaluated. However, `WindowAssigner` have a default `Trigger`
+   * that is used if a `Trigger` is not specified.
+   *
+   * Note: This operation can be inherently non-parallel since all elements have to pass through
+   * the same operator instance. (Only for special cases, such as aligned time windows is
+   * it possible to perform this operation in parallel).
+   *
+   * @param assigner The `WindowAssigner` that assigns elements to windows.
+   * @return The trigger windows data stream.
+   */
+  def windowAll[W <: Window](assigner: WindowAssigner[_ >: T, W]): AllWindowedStream[T, W] = {
+    new AllWindowedStream[T, W](new JavaAllWindowedStream[T, W](javaStream, assigner))
+  }
+  /**
+   * Extracts a timestamp from an element and assigns it as the internal timestamp of that element.
+   * The internal timestamps are, for example, used to to event-time window operations.
+   *
+   * If you know that the timestamps are strictly increasing you can use an
+   * [[org.apache.flink.streaming.api.functions.AscendingTimestampExtractor]]. Otherwise,
+   * you should provide a [[TimestampExtractor]] that also implements
+   * [[TimestampExtractor#getCurrentWatermark]] to keep track of watermarks.
+   *
+   * @see org.apache.flink.streaming.api.watermark.Watermark
+   */
+  def extractTimestamp(extractor: TimestampExtractor[T]): DataStream[T] = {
+    javaStream.extractTimestamp(clean(extractor))
+  }
+
+  /**
+   * Extracts a timestamp from an element and assigns it as the internal timestamp of that element.
+   * The internal timestamps are, for example, used to to event-time window operations.
+   *
+   * If you know that the timestamps are strictly increasing you can use an
+   * [[org.apache.flink.streaming.api.functions.AscendingTimestampExtractor]]. Otherwise,
+   * you should provide a [[TimestampExtractor]] that also implements
+   * [[TimestampExtractor#getCurrentWatermark]] to keep track of watermarks.
+   *
+   * @see org.apache.flink.streaming.api.watermark.Watermark
+   */
+  def extractAscendingTimestamp(extractor: T => Long): DataStream[T] = {
+    val cleanExtractor = clean(extractor)
+    val extractorFunction = new AscendingTimestampExtractor[T] {
+      def extractAscendingTimestamp(element: T, currentTimestamp: Long): Long = {
+        cleanExtractor(element)
+      }
+    }
+    javaStream.extractTimestamp(extractorFunction)
+  }
+
+  /**
    *
    * Operator used for directing tuples to specific named outputs using an
    * OutputSelector. Calling this method on an operator creates a new
-   * SplitDataStream.
+   * [[SplitStream]].
    */
-  def split(selector: OutputSelector[T]): SplitDataStream[T] = javaStream.split(selector)
+  def split(selector: OutputSelector[T]): SplitStream[T] = javaStream.split(selector)
 
   /**
-   * Creates a new SplitDataStream that contains only the elements satisfying the
+   * Creates a new [[SplitStream]] that contains only the elements satisfying the
    *  given output selector predicate.
    */
-  def split(fun: T => TraversableOnce[String]): SplitDataStream[T] = {
+  def split(fun: T => TraversableOnce[String]): SplitStream[T] = {
     if (fun == null) {
       throw new NullPointerException("OutputSelector must not be null.")
     }
@@ -672,21 +763,6 @@ class DataStream[T](javaStream: JavaStream[T]) {
    */
   def join[R](stream: DataStream[R]): StreamJoinOperator[T, R] =
     new StreamJoinOperator[T, R](javaStream, stream.getJavaStream)
-
-  /**
-   * Initiates a temporal cross transformation that builds all pair
-   * combinations of elements of both DataStreams, i.e., it builds a Cartesian
-   * product.
-   *
-   * This method returns a StreamJoinOperator on which the
-   * .onWindow(..) should be called to define the
-   * window, and then the .where(..) and .equalTo(..) methods can be used to defin
-   * the join keys.</p> The user can also use the apply method of the returned JoinedStream
-   * to use custom join function.
-   *
-   */
-  def cross[R](stream: DataStream[R]): StreamCrossOperator[T, R] =
-    new StreamCrossOperator[T, R](javaStream, stream.getJavaStream)
 
   /**
    * Writes a DataStream to the standard output stream (stdout). For each
@@ -784,7 +860,7 @@ class DataStream[T](javaStream: JavaStream[T]) {
 
   /**
    * Returns a "closure-cleaned" version of the given function. Cleans only if closure cleaning
-   * is not disabled in the {@link org.apache.flink.api.common.ExecutionConfig}
+   * is not disabled in the [[org.apache.flink.api.common.ExecutionConfig]].
    */
   private[flink] def clean[F <: AnyRef](f: F): F = {
     new StreamExecutionEnvironment(javaStream.getExecutionEnvironment).scalaClean(f)

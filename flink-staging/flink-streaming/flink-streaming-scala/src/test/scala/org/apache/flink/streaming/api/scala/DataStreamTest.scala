@@ -50,7 +50,7 @@ class DataStreamTest extends StreamingMultipleProgramsTestBase {
     assert("testMap" == dataStream1.getName)
 
     val dataStream2 = env.generateSequence(0, 0).name("testSource2")
-      .groupBy(x=>x)
+      .keyBy(x=>x)
       .reduce((x, y) => 0)
       .name("testReduce")
     assert("testReduce" == dataStream2.getName)
@@ -83,8 +83,8 @@ class DataStreamTest extends StreamingMultipleProgramsTestBase {
   }
 
   /**
-   * Tests that {@link DataStream#groupBy} and {@link DataStream#partitionBy(KeySelector)} result in
-   * different and correct topologies. Does the some for the {@link ConnectedDataStream}.
+   * Tests that {@link DataStream#keyBy} and {@link DataStream#partitionBy(KeySelector)} result in
+   * different and correct topologies. Does the some for the {@link ConnectedStreams}.
    */
   @Test
   def testPartitioning(): Unit = {
@@ -95,10 +95,10 @@ class DataStreamTest extends StreamingMultipleProgramsTestBase {
 
     val connected = src1.connect(src2)
 
-    val group1 = src1.groupBy(0)
-    val group2 = src1.groupBy(1, 0)
-    val group3 = src1.groupBy("_1")
-    val group4 = src1.groupBy(x => x._1)
+    val group1 = src1.keyBy(0)
+    val group2 = src1.keyBy(1, 0)
+    val group3 = src1.keyBy("_1")
+    val group4 = src1.keyBy(x => x._1)
 
     val gid1 = createDownStreamId(group1)
     val gid2 = createDownStreamId(group2)
@@ -144,21 +144,21 @@ class DataStreamTest extends StreamingMultipleProgramsTestBase {
     assert(isCustomPartitioned(env.getStreamGraph.getStreamEdge(src1.getId, cpid2)))
     assert(isCustomPartitioned(env.getStreamGraph.getStreamEdge(src1.getId, cpid3)))
 
-    //Testing ConnectedDataStream grouping
-    val connectedGroup1: ConnectedDataStream[_, _] = connected.groupBy(0, 0)
+    //Testing ConnectedStreams grouping
+    val connectedGroup1: ConnectedStreams[_, _] = connected.keyBy(0, 0)
     val downStreamId1: Integer = createDownStreamId(connectedGroup1)
 
-    val connectedGroup2: ConnectedDataStream[_, _] = connected.groupBy(Array[Int](0), Array[Int](0))
+    val connectedGroup2: ConnectedStreams[_, _] = connected.keyBy(Array[Int](0), Array[Int](0))
     val downStreamId2: Integer = createDownStreamId(connectedGroup2)
 
-    val connectedGroup3: ConnectedDataStream[_, _] = connected.groupBy("_1", "_1")
+    val connectedGroup3: ConnectedStreams[_, _] = connected.keyBy("_1", "_1")
     val downStreamId3: Integer = createDownStreamId(connectedGroup3)
 
-    val connectedGroup4: ConnectedDataStream[_, _] =
-      connected.groupBy(Array[String]("_1"), Array[String]("_1"))
+    val connectedGroup4: ConnectedStreams[_, _] =
+      connected.keyBy(Array[String]("_1"), Array[String]("_1"))
     val downStreamId4: Integer = createDownStreamId(connectedGroup4)
 
-    val connectedGroup5: ConnectedDataStream[_, _] = connected.groupBy(x => x._1, x => x._1)
+    val connectedGroup5: ConnectedStreams[_, _] = connected.keyBy(x => x._1, x => x._1)
     val downStreamId5: Integer = createDownStreamId(connectedGroup5)
 
     assert(isPartitioned(env.getStreamGraph.getStreamEdge(src1.getId, downStreamId1)))
@@ -176,22 +176,22 @@ class DataStreamTest extends StreamingMultipleProgramsTestBase {
     assert(isPartitioned(env.getStreamGraph.getStreamEdge(src1.getId, downStreamId5)))
     assert(isPartitioned(env.getStreamGraph.getStreamEdge(src2.getId, downStreamId5)))
 
-    //Testing ConnectedDataStream partitioning
-    val connectedPartition1: ConnectedDataStream[_, _] = connected.partitionByHash(0, 0)
+    //Testing ConnectedStreams partitioning
+    val connectedPartition1: ConnectedStreams[_, _] = connected.partitionByHash(0, 0)
     val connectDownStreamId1: Integer = createDownStreamId(connectedPartition1)
 
-    val connectedPartition2: ConnectedDataStream[_, _] =
+    val connectedPartition2: ConnectedStreams[_, _] =
       connected.partitionByHash(Array[Int](0), Array[Int](0))
     val connectDownStreamId2: Integer = createDownStreamId(connectedPartition2)
 
-    val connectedPartition3: ConnectedDataStream[_, _] = connected.partitionByHash("_1", "_1")
+    val connectedPartition3: ConnectedStreams[_, _] = connected.partitionByHash("_1", "_1")
     val connectDownStreamId3: Integer = createDownStreamId(connectedPartition3)
 
-    val connectedPartition4: ConnectedDataStream[_, _] =
+    val connectedPartition4: ConnectedStreams[_, _] =
       connected.partitionByHash(Array[String]("_1"), Array[String]("_1"))
     val connectDownStreamId4: Integer = createDownStreamId(connectedPartition4)
 
-    val connectedPartition5: ConnectedDataStream[_, _] =
+    val connectedPartition5: ConnectedStreams[_, _] =
       connected.partitionByHash(x => x._1, x => x._1)
     val connectDownStreamId5: Integer = createDownStreamId(connectedPartition5)
 
@@ -413,10 +413,10 @@ class DataStreamTest extends StreamingMultipleProgramsTestBase {
     val foldFunction = new FoldFunction[Int, String] {
       override def fold(accumulator: String, value: Int): String = ""
     }
-    val fold = map.groupBy(x=>x).fold("", foldFunction)
+    val fold = map.keyBy(x=>x).fold("", foldFunction)
     assert(foldFunction == getFunctionForDataStream(fold))
     assert(
-      getFunctionForDataStream(map.groupBy(x=>x)
+      getFunctionForDataStream(map.keyBy(x=>x)
         .fold("", (x: String, y: Int) => ""))
         .isInstanceOf[FoldFunction[_, _]])
 
@@ -492,7 +492,7 @@ class DataStreamTest extends StreamingMultipleProgramsTestBase {
     // we need to rebalance before iteration
     val source = env.fromElements(1, 2, 3).map { t: Int => t }
 
-    val iterated = source.iterate((input: ConnectedDataStream[Int, String]) => {
+    val iterated = source.iterate((input: ConnectedStreams[Int, String]) => {
       val head = input.map(i => (i + 1).toString, s => s)
       (head.filter(_ == "2"), head.filter(_ != "2"))
     }, 1000).print()
@@ -501,7 +501,7 @@ class DataStreamTest extends StreamingMultipleProgramsTestBase {
       (input.map(_ + 1), input.map(_.toString)), 2000)
 
     try {
-      val invalid = source.iterate((input: ConnectedDataStream[Int, String]) => {
+      val invalid = source.iterate((input: ConnectedStreams[Int, String]) => {
         val head = input.partitionByHash(1, 1).map(i => (i + 1).toString, s => s)
         (head.filter(_ == "2"), head.filter(_ != "2"))
       }, 1000).print()
@@ -546,7 +546,7 @@ class DataStreamTest extends StreamingMultipleProgramsTestBase {
     return dataStream.print.getTransformation.getId
   }
 
-  private def createDownStreamId(dataStream: ConnectedDataStream[_, _]): Integer = {
+  private def createDownStreamId(dataStream: ConnectedStreams[_, _]): Integer = {
     val m = dataStream.map(x => 0, x => 0)
     m.print()
     m.getId

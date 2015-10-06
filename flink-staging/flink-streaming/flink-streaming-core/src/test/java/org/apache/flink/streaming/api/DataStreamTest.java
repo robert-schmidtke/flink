@@ -34,13 +34,13 @@ import org.apache.flink.api.java.functions.KeySelector;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.api.java.typeutils.TypeExtractor;
 import org.apache.flink.streaming.api.collector.selector.OutputSelector;
-import org.apache.flink.streaming.api.datastream.ConnectedDataStream;
+import org.apache.flink.streaming.api.datastream.ConnectedStreams;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.datastream.DataStreamSink;
 import org.apache.flink.streaming.api.datastream.DataStreamSource;
-import org.apache.flink.streaming.api.datastream.GroupedDataStream;
+import org.apache.flink.streaming.api.datastream.KeyedStream;
 import org.apache.flink.streaming.api.datastream.SingleOutputStreamOperator;
-import org.apache.flink.streaming.api.datastream.SplitDataStream;
+import org.apache.flink.streaming.api.datastream.SplitStream;
 import org.apache.flink.streaming.api.datastream.WindowedDataStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.streaming.api.functions.WindowMapFunction;
@@ -62,7 +62,6 @@ import org.apache.flink.streaming.runtime.partitioner.ShufflePartitioner;
 import org.apache.flink.streaming.runtime.partitioner.StreamPartitioner;
 import org.apache.flink.streaming.util.NoOpSink;
 import org.apache.flink.streaming.util.StreamingMultipleProgramsTestBase;
-import org.apache.flink.streaming.util.TestStreamEnvironment;
 import org.apache.flink.util.Collector;
 import org.junit.Test;
 
@@ -126,8 +125,8 @@ public class DataStreamTest extends StreamingMultipleProgramsTestBase {
 	}
 
 	/**
-	 * Tests that {@link DataStream#groupBy} and {@link DataStream#partitionByHash} result in
-	 * different and correct topologies. Does the some for the {@link ConnectedDataStream}.
+	 * Tests that {@link DataStream#keyBy} and {@link DataStream#partitionByHash} result in
+	 * different and correct topologies. Does the some for the {@link ConnectedStreams}.
 	 */
 	@Test
 	@SuppressWarnings("unchecked")
@@ -136,13 +135,13 @@ public class DataStreamTest extends StreamingMultipleProgramsTestBase {
 
 		DataStream src1 = env.fromElements(new Tuple2<Long, Long>(0L, 0L));
 		DataStream src2 = env.fromElements(new Tuple2<Long, Long>(0L, 0L));
-		ConnectedDataStream connected = src1.connect(src2);
+		ConnectedStreams connected = src1.connect(src2);
 
 		//Testing DataStream grouping
-		DataStream group1 = src1.groupBy(0);
-		DataStream group2 = src1.groupBy(1, 0);
-		DataStream group3 = src1.groupBy("f0");
-		DataStream group4 = src1.groupBy(new FirstSelector());
+		DataStream group1 = src1.keyBy(0);
+		DataStream group2 = src1.keyBy(1, 0);
+		DataStream group3 = src1.keyBy("f0");
+		DataStream group4 = src1.keyBy(new FirstSelector());
 
 		int id1 = createDownStreamId(group1);
 		int id2 = createDownStreamId(group2);
@@ -154,10 +153,10 @@ public class DataStreamTest extends StreamingMultipleProgramsTestBase {
 		assertTrue(isPartitioned(env.getStreamGraph().getStreamEdge(src1.getId(), id3)));
 		assertTrue(isPartitioned(env.getStreamGraph().getStreamEdge(src1.getId(), id4)));
 
-		assertTrue(isGrouped(group1));
-		assertTrue(isGrouped(group2));
-		assertTrue(isGrouped(group3));
-		assertTrue(isGrouped(group4));
+		assertTrue(isKeyed(group1));
+		assertTrue(isKeyed(group2));
+		assertTrue(isKeyed(group3));
+		assertTrue(isKeyed(group4));
 
 		//Testing DataStream partitioning
 		DataStream partition1 = src1.partitionByHash(0);
@@ -175,10 +174,10 @@ public class DataStreamTest extends StreamingMultipleProgramsTestBase {
 		assertTrue(isPartitioned(env.getStreamGraph().getStreamEdge(src1.getId(), pid3)));
 		assertTrue(isPartitioned(env.getStreamGraph().getStreamEdge(src1.getId(), pid4)));
 
-		assertFalse(isGrouped(partition1));
-		assertFalse(isGrouped(partition3));
-		assertFalse(isGrouped(partition2));
-		assertFalse(isGrouped(partition4));
+		assertFalse(isKeyed(partition1));
+		assertFalse(isKeyed(partition3));
+		assertFalse(isKeyed(partition2));
+		assertFalse(isKeyed(partition4));
 
 		// Testing DataStream custom partitioning
 		Partitioner<Long> longPartitioner = new Partitioner<Long>() {
@@ -200,24 +199,24 @@ public class DataStreamTest extends StreamingMultipleProgramsTestBase {
 		assertTrue(isCustomPartitioned(env.getStreamGraph().getStreamEdge(src1.getId(), cid2)));
 		assertTrue(isCustomPartitioned(env.getStreamGraph().getStreamEdge(src1.getId(), cid3)));
 
-		assertFalse(isGrouped(customPartition1));
-		assertFalse(isGrouped(customPartition3));
-		assertFalse(isGrouped(customPartition4));
+		assertFalse(isKeyed(customPartition1));
+		assertFalse(isKeyed(customPartition3));
+		assertFalse(isKeyed(customPartition4));
 
-		//Testing ConnectedDataStream grouping
-		ConnectedDataStream connectedGroup1 = connected.groupBy(0, 0);
+		//Testing ConnectedStreams grouping
+		ConnectedStreams connectedGroup1 = connected.keyBy(0, 0);
 		Integer downStreamId1 = createDownStreamId(connectedGroup1);
 
-		ConnectedDataStream connectedGroup2 = connected.groupBy(new int[]{0}, new int[]{0});
+		ConnectedStreams connectedGroup2 = connected.keyBy(new int[]{0}, new int[]{0});
 		Integer downStreamId2 = createDownStreamId(connectedGroup2);
 
-		ConnectedDataStream connectedGroup3 = connected.groupBy("f0", "f0");
+		ConnectedStreams connectedGroup3 = connected.keyBy("f0", "f0");
 		Integer downStreamId3 = createDownStreamId(connectedGroup3);
 
-		ConnectedDataStream connectedGroup4 = connected.groupBy(new String[]{"f0"}, new String[]{"f0"});
+		ConnectedStreams connectedGroup4 = connected.keyBy(new String[]{"f0"}, new String[]{"f0"});
 		Integer downStreamId4 = createDownStreamId(connectedGroup4);
 
-		ConnectedDataStream connectedGroup5 = connected.groupBy(new FirstSelector(), new FirstSelector());
+		ConnectedStreams connectedGroup5 = connected.keyBy(new FirstSelector(), new FirstSelector());
 		Integer downStreamId5 = createDownStreamId(connectedGroup5);
 
 		assertTrue(isPartitioned(env.getStreamGraph().getStreamEdge(src1.getId(), downStreamId1)));
@@ -235,26 +234,26 @@ public class DataStreamTest extends StreamingMultipleProgramsTestBase {
 		assertTrue(isPartitioned(env.getStreamGraph().getStreamEdge(src1.getId(), downStreamId5)));
 		assertTrue(isPartitioned(env.getStreamGraph().getStreamEdge(src2.getId(), downStreamId5)));
 
-		assertTrue(isGrouped(connectedGroup1));
-		assertTrue(isGrouped(connectedGroup2));
-		assertTrue(isGrouped(connectedGroup3));
-		assertTrue(isGrouped(connectedGroup4));
-		assertTrue(isGrouped(connectedGroup5));
+		assertTrue(isKeyed(connectedGroup1));
+		assertTrue(isKeyed(connectedGroup2));
+		assertTrue(isKeyed(connectedGroup3));
+		assertTrue(isKeyed(connectedGroup4));
+		assertTrue(isKeyed(connectedGroup5));
 
-		//Testing ConnectedDataStream partitioning
-		ConnectedDataStream connectedPartition1 = connected.partitionByHash(0, 0);
+		//Testing ConnectedStreams partitioning
+		ConnectedStreams connectedPartition1 = connected.partitionByHash(0, 0);
 		Integer connectDownStreamId1 = createDownStreamId(connectedPartition1);
 
-		ConnectedDataStream connectedPartition2 = connected.partitionByHash(new int[]{0}, new int[]{0});
+		ConnectedStreams connectedPartition2 = connected.partitionByHash(new int[]{0}, new int[]{0});
 		Integer connectDownStreamId2 = createDownStreamId(connectedPartition2);
 
-		ConnectedDataStream connectedPartition3 = connected.partitionByHash("f0", "f0");
+		ConnectedStreams connectedPartition3 = connected.partitionByHash("f0", "f0");
 		Integer connectDownStreamId3 = createDownStreamId(connectedPartition3);
 
-		ConnectedDataStream connectedPartition4 = connected.partitionByHash(new String[]{"f0"}, new String[]{"f0"});
+		ConnectedStreams connectedPartition4 = connected.partitionByHash(new String[]{"f0"}, new String[]{"f0"});
 		Integer connectDownStreamId4 = createDownStreamId(connectedPartition4);
 
-		ConnectedDataStream connectedPartition5 = connected.partitionByHash(new FirstSelector(), new FirstSelector());
+		ConnectedStreams connectedPartition5 = connected.partitionByHash(new FirstSelector(), new FirstSelector());
 		Integer connectDownStreamId5 = createDownStreamId(connectedPartition5);
 
 		assertTrue(isPartitioned(env.getStreamGraph().getStreamEdge(src1.getId(),
@@ -282,11 +281,11 @@ public class DataStreamTest extends StreamingMultipleProgramsTestBase {
 		assertTrue(isPartitioned(env.getStreamGraph().getStreamEdge(src2.getId(),
 				connectDownStreamId5)));
 
-		assertFalse(isGrouped(connectedPartition1));
-		assertFalse(isGrouped(connectedPartition2));
-		assertFalse(isGrouped(connectedPartition3));
-		assertFalse(isGrouped(connectedPartition4));
-		assertFalse(isGrouped(connectedPartition5));
+		assertFalse(isKeyed(connectedPartition1));
+		assertFalse(isKeyed(connectedPartition2));
+		assertFalse(isKeyed(connectedPartition3));
+		assertFalse(isKeyed(connectedPartition4));
+		assertFalse(isKeyed(connectedPartition5));
 	}
 
 	/**
@@ -458,7 +457,7 @@ public class DataStreamTest extends StreamingMultipleProgramsTestBase {
 			}
 		};
 
-		SplitDataStream<Integer> split = unionFilter.split(outputSelector);
+		SplitStream<Integer> split = unionFilter.split(outputSelector);
 		split.select("dummy").addSink(new NoOpSink<Integer>());
 		List<OutputSelector<?>> outputSelectors = env.getStreamGraph().getStreamNode(unionFilter.getId()).getOutputSelectors();
 		assertEquals(1, outputSelectors.size());
@@ -470,7 +469,7 @@ public class DataStreamTest extends StreamingMultipleProgramsTestBase {
 		StreamEdge splitEdge = env.getStreamGraph().getStreamEdge(unionFilter.getId(), sink.getTransformation().getId());
 		assertEquals("a", splitEdge.getSelectedNames().get(0));
 
-		ConnectedDataStream<Integer, Integer> connect = map.connect(flatMap);
+		ConnectedStreams<Integer, Integer> connect = map.connect(flatMap);
 		CoMapFunction<Integer, Integer, String> coMapper = new CoMapFunction<Integer, Integer, String>() {
 			@Override
 			public String map1(Integer value) {
@@ -602,11 +601,11 @@ public class DataStreamTest extends StreamingMultipleProgramsTestBase {
 		return dataStream.print().getTransformation().getId();
 	}
 
-	private static boolean isGrouped(DataStream dataStream) {
-		return dataStream instanceof GroupedDataStream;
+	private static boolean isKeyed(DataStream dataStream) {
+		return dataStream instanceof KeyedStream;
 	}
 
-	private static Integer createDownStreamId(ConnectedDataStream dataStream) {
+	private static Integer createDownStreamId(ConnectedStreams dataStream) {
 		SingleOutputStreamOperator coMap = dataStream.map(new CoMapFunction<Tuple2<Long, Long>, Tuple2<Long, Long>, Object>() {
 			@Override
 			public Object map1(Tuple2<Long, Long> value) {
@@ -622,8 +621,8 @@ public class DataStreamTest extends StreamingMultipleProgramsTestBase {
 		return coMap.getId();
 	}
 
-	private static boolean isGrouped(ConnectedDataStream dataStream) {
-		return (dataStream.getFirst() instanceof GroupedDataStream && dataStream.getSecond() instanceof GroupedDataStream);
+	private static boolean isKeyed(ConnectedStreams dataStream) {
+		return (dataStream.getFirstInput() instanceof KeyedStream && dataStream.getSecondInput() instanceof KeyedStream);
 	}
 
 	private static boolean isPartitioned(StreamEdge edge) {

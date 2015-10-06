@@ -19,7 +19,7 @@ package org.apache.flink.streaming.runtime.operators.windowing;
 
 import com.google.common.annotations.VisibleForTesting;
 import org.apache.flink.api.java.tuple.Tuple2;
-import org.apache.flink.streaming.api.functions.windowing.WindowFunction;
+import org.apache.flink.streaming.api.functions.windowing.AllWindowFunction;
 import org.apache.flink.streaming.api.windowing.assigners.WindowAssigner;
 import org.apache.flink.streaming.api.windowing.evictors.Evictor;
 import org.apache.flink.streaming.api.windowing.triggers.Trigger;
@@ -30,7 +30,15 @@ import org.apache.flink.streaming.runtime.operators.windowing.buffers.WindowBuff
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-
+/**
+ * Evicting window operator for non-keyed windows.
+ *
+ * @see org.apache.flink.streaming.runtime.operators.windowing.EvictingWindowOperator
+ *
+ * @param <IN> The type of the incoming elements.
+ * @param <OUT> The type of elements emitted by the {@code WindowFunction}.
+ * @param <W> The type of {@code Window} that the {@code WindowAssigner} assigns.
+ */
 public class EvictingNonKeyedWindowOperator<IN, OUT, W extends Window> extends NonKeyedWindowOperator<IN, OUT, W> {
 
 	private static final long serialVersionUID = 1L;
@@ -41,7 +49,7 @@ public class EvictingNonKeyedWindowOperator<IN, OUT, W extends Window> extends N
 
 	public EvictingNonKeyedWindowOperator(WindowAssigner<? super IN, W> windowAssigner,
 			WindowBufferFactory<? super IN, ? extends EvictingWindowBuffer<IN>> windowBufferFactory,
-			WindowFunction<IN, OUT, W> windowFunction,
+			AllWindowFunction<IN, OUT, W> windowFunction,
 			Trigger<? super IN, ? super W> trigger,
 			Evictor<? super IN, ? super W> evictor) {
 		super(windowAssigner, windowBufferFactory, windowFunction, trigger);
@@ -77,7 +85,7 @@ public class EvictingNonKeyedWindowOperator<IN, OUT, W extends Window> extends N
 
 		windowBuffer.removeElements(toEvict);
 
-		userFunction.evaluate(
+		userFunction.apply(
 				window,
 				bufferAndTrigger.f0.getUnpackedElements(),
 				timestampedCollector);

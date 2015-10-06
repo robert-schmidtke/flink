@@ -25,9 +25,9 @@ import org.apache.flink.api.scala.{createTuple2TypeInformation => apiTupleCreato
 import org.apache.flink.api.scala.typeutils.{CaseClassTypeInfo, TypeUtils}
 import org.apache.flink.streaming.api.datastream.{ DataStream => JavaStream }
 import org.apache.flink.streaming.api.datastream.{ WindowedDataStream => JavaWStream }
-import org.apache.flink.streaming.api.datastream.{ SplitDataStream => SplitJavaStream }
-import org.apache.flink.streaming.api.datastream.{ ConnectedDataStream => JavaConStream }
-import org.apache.flink.streaming.api.datastream.{ GroupedDataStream => GroupedJavaStream }
+import org.apache.flink.streaming.api.datastream.{ SplitStream => SplitJavaStream }
+import org.apache.flink.streaming.api.datastream.{ ConnectedStreams => ConnectedJavaStreams }
+import org.apache.flink.streaming.api.datastream.{ KeyedStream => KeyedJavaStream }
 import language.implicitConversions
 
 package object scala {
@@ -38,17 +38,17 @@ package object scala {
   implicit def javaToScalaStream[R](javaStream: JavaStream[R]): DataStream[R] =
     new DataStream[R](javaStream)
     
-  implicit def javaToScalaGroupedStream[R, K](javaStream: GroupedJavaStream[R, K]): 
-  GroupedDataStream[R, K] = new GroupedDataStream[R, K](javaStream)    
+  implicit def javaToScalaGroupedStream[R, K](javaStream: KeyedJavaStream[R, K]):
+  KeyedStream[R, K] = new KeyedStream[R, K](javaStream)
 
   implicit def javaToScalaWindowedStream[R](javaWStream: JavaWStream[R]): WindowedDataStream[R] =
     new WindowedDataStream[R](javaWStream)
 
-  implicit def javaToScalaSplitStream[R](javaStream: SplitJavaStream[R]): SplitDataStream[R] =
-    new SplitDataStream[R](javaStream)
+  implicit def javaToScalaSplitStream[R](javaStream: SplitJavaStream[R]): SplitStream[R] =
+    new SplitStream[R](javaStream)
 
-  implicit def javaToScalaConnectedStream[IN1, IN2](javaStream: JavaConStream[IN1, IN2]):
-  ConnectedDataStream[IN1, IN2] = new ConnectedDataStream[IN1, IN2](javaStream)
+  implicit def javaToScalaConnectedStream[IN1, IN2](javaStream: ConnectedJavaStreams[IN1, IN2]):
+  ConnectedStreams[IN1, IN2] = new ConnectedStreams[IN1, IN2](javaStream)
 
   implicit def seqToFlinkSource[T: ClassTag: TypeInformation](scalaSeq: Seq[T]) : DataStream[T] =
     StreamExecutionEnvironment.getExecutionEnvironment.fromCollection(scalaSeq)
