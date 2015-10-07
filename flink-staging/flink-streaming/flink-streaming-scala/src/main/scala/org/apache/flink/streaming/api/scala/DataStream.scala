@@ -18,32 +18,29 @@
 
 package org.apache.flink.streaming.api.scala
 
-import org.apache.flink.streaming.api.functions.{AscendingTimestampExtractor, TimestampExtractor}
-import org.apache.flink.streaming.api.windowing.assigners._
-import org.apache.flink.streaming.api.windowing.time.{ProcessingTime, EventTime, AbstractTime}
-import org.apache.flink.streaming.api.windowing.windows.{Window, TimeWindow}
-import org.apache.flink.streaming.api.datastream.{AllWindowedStream => JavaAllWindowedStream}
-
-import scala.collection.JavaConverters._
-import scala.reflect.ClassTag
-
-import org.apache.flink.api.java.tuple.{Tuple => JavaTuple}
-import org.apache.flink.api.common.functions.{FlatMapFunction, MapFunction, Partitioner, FilterFunction}
+import org.apache.flink.api.common.functions.{FilterFunction, FlatMapFunction, MapFunction, Partitioner, RichFilterFunction, RichFlatMapFunction, RichMapFunction}
 import org.apache.flink.api.common.io.OutputFormat
 import org.apache.flink.api.common.typeinfo.TypeInformation
 import org.apache.flink.api.java.functions.KeySelector
+import org.apache.flink.api.java.tuple.{Tuple => JavaTuple}
+import org.apache.flink.api.java.typeutils.ResultTypeQueryable
 import org.apache.flink.api.scala.operators.ScalaCsvOutputFormat
 import org.apache.flink.core.fs.{FileSystem, Path}
 import org.apache.flink.streaming.api.collector.selector.OutputSelector
-import org.apache.flink.streaming.api.datastream.{DataStream => JavaStream, DataStreamSink, SingleOutputStreamOperator}
+import org.apache.flink.streaming.api.datastream.{AllWindowedStream => JavaAllWindowedStream, DataStream => JavaStream, KeyedStream => JavaKeyedStream, _}
 import org.apache.flink.streaming.api.functions.sink.SinkFunction
+import org.apache.flink.streaming.api.functions.{AscendingTimestampExtractor, TimestampExtractor}
+import org.apache.flink.streaming.api.scala.function.StatefulFunction
+import org.apache.flink.streaming.api.windowing.assigners._
 import org.apache.flink.streaming.api.windowing.helper.WindowingHelper
 import org.apache.flink.streaming.api.windowing.policy.{EvictionPolicy, TriggerPolicy}
+import org.apache.flink.streaming.api.windowing.time.{AbstractTime, EventTime, ProcessingTime}
+import org.apache.flink.streaming.api.windowing.windows.{TimeWindow, Window}
 import org.apache.flink.streaming.util.serialization.SerializationSchema
 import org.apache.flink.util.Collector
-import org.apache.flink.api.common.functions.{RichMapFunction, RichFlatMapFunction, RichFilterFunction}
-import org.apache.flink.streaming.api.scala.function.StatefulFunction
-import org.apache.flink.streaming.api.datastream.{KeyedStream => JavaKeyedStream}
+
+import scala.collection.JavaConverters._
+import scala.reflect.ClassTag
 
 class DataStream[T](javaStream: JavaStream[T]) {
 
@@ -234,8 +231,9 @@ class DataStream[T](javaStream: JavaStream[T]) {
   def keyBy[K: TypeInformation](fun: T => K): KeyedStream[T, K] = {
 
     val cleanFun = clean(fun)
-    val keyExtractor = new KeySelector[T, K] {
+    val keyExtractor = new KeySelector[T, K] with ResultTypeQueryable[K] {
       def getKey(in: T) = cleanFun(in)
+      override def getProducedType: TypeInformation[K] = implicitly[TypeInformation[K]]
     }
     javaStream.keyBy(keyExtractor)
   }
@@ -260,8 +258,9 @@ class DataStream[T](javaStream: JavaStream[T]) {
   def partitionByHash[K: TypeInformation](fun: T => K): DataStream[T] = {
 
     val cleanFun = clean(fun)
-    val keyExtractor = new KeySelector[T, K] {
+    val keyExtractor = new KeySelector[T, K] with ResultTypeQueryable[K] {
       def getKey(in: T) = cleanFun(in)
+      override def getProducedType: TypeInformation[K] = implicitly[TypeInformation[K]]
     }
     javaStream.partitionByHash(keyExtractor)
   }
@@ -297,8 +296,9 @@ class DataStream[T](javaStream: JavaStream[T]) {
   def partitionCustom[K: TypeInformation](partitioner: Partitioner[K], fun: T => K)
   : DataStream[T] = {
     val cleanFun = clean(fun)
-    val keyExtractor = new KeySelector[T, K] {
+    val keyExtractor = new KeySelector[T, K] with ResultTypeQueryable[K] {
       def getKey(in: T) = cleanFun(in)
+      override def getProducedType: TypeInformation[K] = implicitly[TypeInformation[K]]
     }
     javaStream.partitionCustom(partitioner, keyExtractor)
   }
