@@ -191,6 +191,10 @@ public class Scheduler implements InstanceListener, SlotAvailabilityListener {
 							+ "co-location constraint and an external location constraint.");
 				}
 				
+				LOG.debug("Constraint: " + constraint);
+				for (Instance i : vertex.getPreferredLocations()) {
+					LOG.debug("Preferred location: " + i.getInstanceConnectionInfo().getHostname());
+				}
 				// get a slot from the group, if the group has one for us (and can fulfill the constraint)
 				final SimpleSlot slotFromGroup;
 				if (constraint == null) {

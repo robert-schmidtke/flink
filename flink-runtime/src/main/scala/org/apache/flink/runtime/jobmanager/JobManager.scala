@@ -705,9 +705,11 @@ class JobManager(
               if (vertex.getParallelism() == ExecutionConfig.PARALLELISM_AUTO_MAX) {
                 vertex.setParallelism(numSlots)
               }
+              log.debug(s"Vertex '${vertex.getName()}' has parallelism ${vertex.getParallelism}")
 
               try {
                 vertex.initializeOnMaster(userCodeLoader)
+                log.debug(s"Initialized vertex '${vertex.getName()}'")
               }
               catch {
             case t: Throwable =>
