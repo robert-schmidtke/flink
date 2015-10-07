@@ -158,7 +158,7 @@ public class Scheduler implements InstanceListener, SlotAvailabilityListener {
 			throw new NullPointerException();
 		}
 		if (LOG.isDebugEnabled()) {
-			LOG.debug("Scheduling task " + task);
+			LOG.debug("Scheduling task " + task + (queueIfNoResource ? "(queued)" : "(immediately)"));
 		}
 
 		final ExecutionVertex vertex = task.getTaskToExecute().getVertex();
@@ -166,7 +166,7 @@ public class Scheduler implements InstanceListener, SlotAvailabilityListener {
 		final Iterable<Instance> preferredLocations = vertex.getPreferredLocations();
 		final boolean forceExternalLocation = vertex.isScheduleLocalOnly() &&
 									preferredLocations != null && preferredLocations.iterator().hasNext();
-	
+			
 		synchronized (globalLock) {
 			
 			SlotSharingGroup sharingUnit = task.getSlotSharingGroup();
@@ -174,6 +174,8 @@ public class Scheduler implements InstanceListener, SlotAvailabilityListener {
 			if (sharingUnit != null) {
 
 				// 1)  === If the task has a slot sharing group, schedule with shared slots ===
+				
+				LOG.debug("Slot sharing group: " + sharingUnit);
 				
 				if (queueIfNoResource) {
 					throw new IllegalArgumentException(
@@ -197,6 +199,8 @@ public class Scheduler implements InstanceListener, SlotAvailabilityListener {
 				else {
 					slotFromGroup = assignment.getSlotForTask(vertex, constraint);
 				}
+				
+				LOG.debug("Slot from group: " + slotFromGroup);
 
 				SimpleSlot newSlot = null;
 				SimpleSlot toUse = null;
@@ -233,7 +237,13 @@ public class Scheduler implements InstanceListener, SlotAvailabilityListener {
 						localOnly = forceExternalLocation;
 					}
 					
+					for (Instance l : locations) {
+						LOG.debug("Preferred location: " + l.getInstanceConnectionInfo().getHostname());
+					}
+					
 					newSlot = getNewSlotForSharingGroup(vertex, locations, assignment, constraint, localOnly);
+					
+					LOG.debug("new slot: " + newSlot);
 
 					if (newSlot == null) {
 						if (slotFromGroup == null) {
@@ -277,6 +287,8 @@ public class Scheduler implements InstanceListener, SlotAvailabilityListener {
 						newSlot.releaseSlot();
 						toUse = slotFromGroup;
 					}
+					
+					LOG.debug("to use: " + toUse);
 
 					// if this is the first slot for the co-location constraint, we lock
 					// the location, because we are going to use that slot
@@ -306,7 +318,10 @@ public class Scheduler implements InstanceListener, SlotAvailabilityListener {
 				
 				// 2) === schedule without hints and sharing ===
 				
+				LOG.debug("No slot sharing group");
+				
 				SimpleSlot slot = getFreeSlotForTask(vertex, preferredLocations, forceExternalLocation);
+				LOG.debug("slot: " + slot);
 				if (slot != null) {
 					updateLocalityCounters(slot, vertex);
 					return slot;
