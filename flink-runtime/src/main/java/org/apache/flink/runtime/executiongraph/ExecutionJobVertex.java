@@ -280,6 +280,8 @@ public class ExecutionJobVertex implements Serializable {
 		
 		// check if we need to do pre-assignment of tasks
 		if (inputSplitsPerSubtask != null) {
+			
+			LOG.debug("input splits per subtask");
 		
 			final Map<String, List<Instance>> instances = scheduler.getInstancesByHost();
 			final Map<String, Integer> assignments = new HashMap<String, Integer>();
@@ -287,16 +289,20 @@ public class ExecutionJobVertex implements Serializable {
 			for (int i = 0; i < vertices.length; i++) {
 				List<LocatableInputSplit> splitsForHost = inputSplitsPerSubtask[i];
 				if (splitsForHost == null || splitsForHost.isEmpty()) {
+					LOG.debug("no splits for vertex " + i);
 					continue;
 				}
 				
 				String[] hostNames = splitsForHost.get(0).getHostnames();
 				if (hostNames == null || hostNames.length == 0 || hostNames[0] == null) {
+					LOG.debug("no hostnames for vertex " + i);
 					continue;
 				}
 				
 				String host = hostNames[0];
 				ExecutionVertex v = vertices[i];
+				
+				LOG.debug(host + " is a host for vertex " + i);
 				
 				List<Instance> instancesOnHost = instances.get(host);
 				
@@ -313,8 +319,14 @@ public class ExecutionJobVertex implements Serializable {
 					assignments.put(host, pos + 1 % instancesOnHost.size());
 				}
 				
+				LOG.debug("put " + assignments.get(host) + " for host " + host + " for vertex " + i);
+				
 				v.setLocationConstraintHosts(Collections.singletonList(instancesOnHost.get(pos)));
+				
+				LOG.debug("location constraint on host " + instancesOnHost.get(pos).getInstanceConnectionInfo().getHostname() + " for vertex " + i);
 			}
+		} else {
+			LOG.debug("no input splits per subtask");
 		}
 		
 		// kick off the tasks

@@ -641,6 +641,8 @@ public class ExecutionGraph implements Serializable {
 		
 		if (transitionState(JobStatus.CREATED, JobStatus.RUNNING)) {
 			this.scheduler = scheduler;
+			
+			LOG.debug("Running schedule mode " + scheduleMode.name());
 
 			switch (scheduleMode) {
 
@@ -648,6 +650,7 @@ public class ExecutionGraph implements Serializable {
 					// simply take the vertices without inputs.
 					for (ExecutionJobVertex ejv : this.tasks.values()) {
 						if (ejv.getJobVertex().isInputVertex()) {
+							LOG.debug("Scheduling input vertex " + ejv);
 							ejv.scheduleAll(scheduler, allowQueuedScheduling);
 						}
 					}
@@ -655,6 +658,7 @@ public class ExecutionGraph implements Serializable {
 
 				case ALL:
 					for (ExecutionJobVertex ejv : getVerticesTopologically()) {
+						LOG.debug("Scheduling vertex " + ejv);
 						ejv.scheduleAll(scheduler, allowQueuedScheduling);
 					}
 					break;
