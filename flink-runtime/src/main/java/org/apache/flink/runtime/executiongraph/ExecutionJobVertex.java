@@ -330,7 +330,9 @@ public class ExecutionJobVertex implements Serializable {
 		}
 		
 		// kick off the tasks
+		int i = 0;
 		for (ExecutionVertex ev : vertices) {
+			LOG.debug("Scheduling vertex " + ++i + "/" + vertices.length);
 			ev.scheduleForExecution(scheduler, queued);
 		}
 	}

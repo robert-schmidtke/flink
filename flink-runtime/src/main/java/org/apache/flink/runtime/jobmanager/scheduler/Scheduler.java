@@ -158,7 +158,7 @@ public class Scheduler implements InstanceListener, SlotAvailabilityListener {
 			throw new NullPointerException();
 		}
 		if (LOG.isDebugEnabled()) {
-			LOG.debug("Scheduling task " + task + (queueIfNoResource ? "(queued)" : "(immediately)"));
+			LOG.debug("Scheduling task " + task + (queueIfNoResource ? " (queued)" : " (immediately)"));
 		}
 
 		final ExecutionVertex vertex = task.getTaskToExecute().getVertex();
