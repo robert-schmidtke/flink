@@ -34,7 +34,7 @@ import org.apache.flink.streaming.api.scala.function.StatefulFunction
 import org.apache.flink.streaming.api.windowing.assigners._
 import org.apache.flink.streaming.api.windowing.helper.WindowingHelper
 import org.apache.flink.streaming.api.windowing.policy.{EvictionPolicy, TriggerPolicy}
-import org.apache.flink.streaming.api.windowing.time.{AbstractTime, EventTime, ProcessingTime}
+import org.apache.flink.streaming.api.windowing.time.AbstractTime
 import org.apache.flink.streaming.api.windowing.windows.{TimeWindow, Window}
 import org.apache.flink.streaming.util.serialization.SerializationSchema
 import org.apache.flink.util.Collector
@@ -624,20 +624,8 @@ class DataStream[T](javaStream: JavaStream[T]) {
    * @param size The size of the window.
    */
   def timeWindowAll(size: AbstractTime): AllWindowedStream[T, TimeWindow] = {
-    val env = new StreamExecutionEnvironment(javaStream.getExecutionEnvironment)
-    val actualSize = size.makeSpecificBasedOnTimeCharacteristic(env.getStreamTimeCharacteristic)
-
-    actualSize match {
-      case t: EventTime =>
-        val assigner = TumblingTimeWindows.of(actualSize)
-          .asInstanceOf[WindowAssigner[T, TimeWindow]]
-        windowAll(assigner)
-      case t: ProcessingTime =>
-        val assigner = TumblingProcessingTimeWindows.of(actualSize)
-          .asInstanceOf[WindowAssigner[T, TimeWindow]]
-        windowAll(assigner)
-      case _ => throw new RuntimeException("Invalid time: " + actualSize)
-    }
+    val assigner = TumblingTimeWindows.of(size).asInstanceOf[WindowAssigner[T, TimeWindow]]
+    windowAll(assigner)
   }
 
   /**
@@ -651,23 +639,8 @@ class DataStream[T](javaStream: JavaStream[T]) {
    * @param size The size of the window.
    */
   def timeWindowAll(size: AbstractTime, slide: AbstractTime): AllWindowedStream[T, TimeWindow] = {
-    val env = new StreamExecutionEnvironment(javaStream.getExecutionEnvironment)
-    val actualSize = size.makeSpecificBasedOnTimeCharacteristic(env.getStreamTimeCharacteristic)
-    val actualSlide = slide.makeSpecificBasedOnTimeCharacteristic(env.getStreamTimeCharacteristic)
-
-    actualSize match {
-      case t: EventTime =>
-        val assigner = SlidingTimeWindows.of(
-          actualSize,
-          actualSlide).asInstanceOf[WindowAssigner[T, TimeWindow]]
-        windowAll(assigner)
-      case t: ProcessingTime =>
-        val assigner = SlidingProcessingTimeWindows.of(
-          actualSize,
-          actualSlide).asInstanceOf[WindowAssigner[T, TimeWindow]]
-        windowAll(assigner)
-      case _ => throw new RuntimeException("Invalid time: " + actualSize)
-    }
+    val assigner = SlidingTimeWindows.of(size, slide).asInstanceOf[WindowAssigner[T, TimeWindow]]
+    windowAll(assigner)
   }
 
   /**
@@ -751,18 +724,20 @@ class DataStream[T](javaStream: JavaStream[T]) {
   }
 
   /**
-   * Initiates a temporal Join transformation that joins the elements of two
-   * data streams on key equality over a specified time window.
-   *
-   * This method returns a StreamJoinOperator on which the
-   * .onWindow(..) should be called to define the
-   * window, and then the .where(..) and .equalTo(..) methods can be used to defin
-   * the join keys.</p> The user can also use the apply method of the returned JoinedStream
-   * to use custom join function.
-   *
+   * Creates a co-group operation. See [[CoGroupedStreams]] for an example of how the keys
+   * and window can be specified.
    */
-  def join[R](stream: DataStream[R]): StreamJoinOperator[T, R] =
-    new StreamJoinOperator[T, R](javaStream, stream.getJavaStream)
+  def coGroup[T2](otherStream: DataStream[T2]): CoGroupedStreams.Unspecified[T, T2] = {
+    CoGroupedStreams.createCoGroup(this, otherStream)
+  }
+
+  /**
+   * Creates a join operation. See [[JoinedStreams]] for an example of how the keys
+   * and window can be specified.
+   */
+  def join[T2](otherStream: DataStream[T2]): JoinedStreams.Unspecified[T, T2] = {
+    JoinedStreams.createJoin(this, otherStream)
+  }
 
   /**
    * Writes a DataStream to the standard output stream (stdout). For each

@@ -16,30 +16,30 @@
  * limitations under the License.
  */
 
-package org.apache.flink.streaming.api.datastream.temporal;
+package org.apache.flink.yarn;
 
-import java.util.concurrent.TimeUnit;
+import org.apache.flink.runtime.jobmanager.JobManager;
+import org.apache.flink.runtime.jobmanager.MemoryArchivist;
+import org.apache.flink.runtime.testingUtils.TestingMemoryArchivist;
 
-public interface TemporalWindow<T> {
+/**
+ * Yarn application master which starts the {@link TestingYarnJobManager} and the
+ * {@link TestingMemoryArchivist}.
+ */
+public class TestingApplicationMaster extends ApplicationMasterBase {
+	@Override
+	public Class<? extends JobManager> getJobManagerClass() {
+		return TestingYarnJobManager.class;
+	}
 
-	/**
-	 * Defines the slide interval for this temporal operator
-	 * 
-	 * @param length
-	 *            Length of the window
-	 * @param timeUnit
-	 *            Unit of time
-	 * @return The temporal operator with slide interval specified
-	 */
-	public T every(long length, TimeUnit timeUnit);
+	@Override
+	public Class<? extends MemoryArchivist> getArchivistClass() {
+		return TestingMemoryArchivist.class;
+	}
 
-	/**
-	 * Defines the slide interval for this temporal operator
-	 * 
-	 * @param length
-	 *            Length of the window
-	 * @return The temporal operator with slide interval specified
-	 */
-	public T every(long length);
+	public static void main(String[] args) {
+		TestingApplicationMaster applicationMaster = new TestingApplicationMaster();
 
+		applicationMaster.run(args);
+	}
 }

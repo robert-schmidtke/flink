@@ -44,7 +44,6 @@ import org.apache.flink.api.java.typeutils.TypeExtractor;
 import org.apache.flink.core.fs.FileSystem.WriteMode;
 import org.apache.flink.core.fs.Path;
 import org.apache.flink.streaming.api.collector.selector.OutputSelector;
-import org.apache.flink.streaming.api.datastream.temporal.StreamJoinOperator;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.streaming.api.functions.TimestampExtractor;
 import org.apache.flink.streaming.api.functions.sink.FileSinkFunctionByMillis;
@@ -60,9 +59,7 @@ import org.apache.flink.streaming.api.transformations.OneInputTransformation;
 import org.apache.flink.streaming.api.transformations.PartitionTransformation;
 import org.apache.flink.streaming.api.transformations.StreamTransformation;
 import org.apache.flink.streaming.api.transformations.UnionTransformation;
-import org.apache.flink.streaming.api.windowing.assigners.SlidingProcessingTimeWindows;
 import org.apache.flink.streaming.api.windowing.assigners.SlidingTimeWindows;
-import org.apache.flink.streaming.api.windowing.assigners.TumblingProcessingTimeWindows;
 import org.apache.flink.streaming.api.windowing.assigners.TumblingTimeWindows;
 import org.apache.flink.streaming.api.windowing.assigners.WindowAssigner;
 import org.apache.flink.streaming.api.windowing.helper.Count;
@@ -73,7 +70,6 @@ import org.apache.flink.streaming.api.windowing.helper.WindowingHelper;
 import org.apache.flink.streaming.api.windowing.policy.EvictionPolicy;
 import org.apache.flink.streaming.api.windowing.policy.TriggerPolicy;
 import org.apache.flink.streaming.api.windowing.time.AbstractTime;
-import org.apache.flink.streaming.api.windowing.time.EventTime;
 import org.apache.flink.streaming.api.windowing.windows.TimeWindow;
 import org.apache.flink.streaming.api.windowing.windows.Window;
 import org.apache.flink.streaming.runtime.operators.ExtractTimestampsOperator;
@@ -618,30 +614,19 @@ public class DataStream<T> {
 	}
 
 	/**
-	 * Initiates a temporal Join transformation. <br/>
-	 * A temporal Join transformation joins the elements of two
-	 * {@link DataStream}s on key equality over a specified time window.
-	 *
-	 * <p>
-	 * This method returns a {@link StreamJoinOperator} on which the
-	 * {@link StreamJoinOperator#onWindow(long, java.util.concurrent.TimeUnit)}
-	 * should be called to define the window, and then the
-	 * {@link StreamJoinOperator.JoinWindow#where(int...)} and
-	 * {@link StreamJoinOperator.JoinPredicate#equalTo(int...)} can be used to define
-	 * the join keys.
-	 * <p>
-	 * The user can also use the
-	 * {@link org.apache.flink.streaming.api.datastream.temporal.StreamJoinOperator.JoinPredicate.JoinedStream#with}
-	 * to apply a custom join function.
-	 * 
-	 * @param dataStreamToJoin
-	 *            The other DataStream with which this DataStream is joined.
-	 * @return A {@link StreamJoinOperator} to continue the definition of the
-	 *         Join transformation.
-	 * 
+	 * Creates a join operation. See {@link CoGroupedStreams} for an example of how the keys
+	 * and window can be specified.
 	 */
-	public <IN2> StreamJoinOperator<T, IN2> join(DataStream<IN2> dataStreamToJoin) {
-		return new StreamJoinOperator<T, IN2>(this, dataStreamToJoin);
+	public <T2> CoGroupedStreams.Unspecified<T, T2> coGroup(DataStream<T2> otherStream) {
+		return CoGroupedStreams.createCoGroup(this, otherStream);
+	}
+
+	/**
+	 * Creates a join operation. See {@link JoinedStreams} for an example of how the keys
+	 * and window can be specified.
+	 */
+	public <T2> JoinedStreams.Unspecified<T, T2> join(DataStream<T2> otherStream) {
+		return JoinedStreams.createJoin(this, otherStream);
 	}
 
 	/**
@@ -738,13 +723,7 @@ public class DataStream<T> {
 	 * @param size The size of the window.
 	 */
 	public AllWindowedStream<T, TimeWindow> timeWindowAll(AbstractTime size) {
-		AbstractTime actualSize = size.makeSpecificBasedOnTimeCharacteristic(environment.getStreamTimeCharacteristic());
-
-		if (actualSize instanceof EventTime) {
-			return windowAll(TumblingTimeWindows.of(actualSize));
-		} else {
-			return windowAll(TumblingProcessingTimeWindows.of(actualSize));
-		}
+		return windowAll(TumblingTimeWindows.of(size));
 	}
 
 	/**
@@ -759,14 +738,7 @@ public class DataStream<T> {
 	 * @param size The size of the window.
 	 */
 	public AllWindowedStream<T, TimeWindow> timeWindowAll(AbstractTime size, AbstractTime slide) {
-		AbstractTime actualSize = size.makeSpecificBasedOnTimeCharacteristic(environment.getStreamTimeCharacteristic());
-		AbstractTime actualSlide = slide.makeSpecificBasedOnTimeCharacteristic(environment.getStreamTimeCharacteristic());
-
-		if (actualSize instanceof EventTime) {
-			return windowAll(SlidingTimeWindows.of(size, slide));
-		} else {
-			return windowAll(SlidingProcessingTimeWindows.of(actualSize, actualSlide));
-		}
+		return windowAll(SlidingTimeWindows.of(size, slide));
 	}
 
 	/**
