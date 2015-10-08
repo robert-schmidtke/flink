@@ -106,6 +106,8 @@ public class ExecutionJobVertex implements Serializable {
 		int vertexParallelism = jobVertex.getParallelism();
 		int numTaskVertices = vertexParallelism > 0 ? vertexParallelism : defaultParallelism;
 		
+		LOG.debug("Ejv vertexParallelism " + vertexParallelism + ", defaultParallelism " + defaultParallelism);
+		
 		this.parallelism = numTaskVertices;
 		this.taskVertices = new ExecutionVertex[numTaskVertices];
 		
@@ -125,6 +127,8 @@ public class ExecutionJobVertex implements Serializable {
 
 		for (int i = 0; i < jobVertex.getProducedDataSets().size(); i++) {
 			final IntermediateDataSet result = jobVertex.getProducedDataSets().get(i);
+			
+			LOG.debug("Produced data set " + (i+1) + "/" + jobVertex.getProducedDataSets().size());
 
 			this.producedDataSets[i] = new IntermediateResult(
 					result.getId(), this, numTaskVertices, result.getResultType());
@@ -153,14 +157,17 @@ public class ExecutionJobVertex implements Serializable {
 				
 				if (inputSplits != null) {
 					if (splitSource instanceof StrictlyLocalAssignment) {
+						LOG.debug("strictly local inputSplits");
 						inputSplitsPerSubtask = computeLocalInputSplitsPerTask(inputSplits);
 						splitAssigner = new PredeterminedInputSplitAssigner(inputSplitsPerSubtask);
 					} else {
+						LOG.debug("nonlocal inputSplits");
 						splitAssigner = splitSource.getInputSplitAssigner(inputSplits);
 					}
 				}
 			}
 			else {
+				LOG.debug("no inputSplits");
 				inputSplits = null;
 			}
 		}

@@ -436,6 +436,8 @@ public abstract class FileInputFormat<OT> extends RichInputFormat<OT, FileInputS
 			throw new IllegalArgumentException("Number of input splits has to be at least 1.");
 		}
 		
+		LOG.debug("createInputSplits for " + minNumSplits + "(" + this.numSplits + ")");
+		
 		// take the desired number of splits into account
 		minNumSplits = Math.max(minNumSplits, this.numSplits);
 		
