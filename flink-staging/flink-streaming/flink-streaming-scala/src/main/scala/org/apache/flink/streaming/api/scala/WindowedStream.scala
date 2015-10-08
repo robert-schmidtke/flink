@@ -18,9 +18,11 @@
 
 package org.apache.flink.streaming.api.scala
 
-import org.apache.flink.api.common.functions.ReduceFunction
+import org.apache.flink.api.common.functions.{FoldFunction, ReduceFunction}
 import org.apache.flink.api.common.typeinfo.TypeInformation
 import org.apache.flink.streaming.api.datastream.{WindowedStream => JavaWStream}
+import org.apache.flink.streaming.api.functions.aggregation.AggregationFunction.AggregationType
+import org.apache.flink.streaming.api.functions.aggregation.{ComparableAggregator, SumAggregator}
 import org.apache.flink.streaming.api.functions.windowing.WindowFunction
 import org.apache.flink.streaming.api.windowing.evictors.Evictor
 import org.apache.flink.streaming.api.windowing.triggers.Trigger
@@ -76,6 +78,7 @@ class WindowedStream[T, K, W <: Window](javaStream: JavaWStream[T, K, W]) {
   // ------------------------------------------------------------------------
   //  Operations on the keyed windows
   // ------------------------------------------------------------------------
+
   /**
    * Applies a reduce function to the window. The window function is called for each evaluation
    * of the window for each key individually. The output of the reduce function is interpreted
@@ -91,8 +94,75 @@ class WindowedStream[T, K, W <: Window](javaStream: JavaWStream[T, K, W]) {
    * @param function The reduce function.
    * @return The data stream that is the result of applying the reduce function to the window.
    */
-  def reduceWindow(function: ReduceFunction[T]): DataStream[T] = {
-    javaStream.reduceWindow(clean(function))
+  def reduce(function: ReduceFunction[T]): DataStream[T] = {
+    javaStream.reduce(clean(function))
+  }
+
+  /**
+   * Applies a reduce function to the window. The window function is called for each evaluation
+   * of the window for each key individually. The output of the reduce function is interpreted
+   * as a regular non-windowed stream.
+   *
+   * This window will try and pre-aggregate data as much as the window policies permit. For example,
+   * tumbling time windows can perfectly pre-aggregate the data, meaning that only one element per
+   * key is stored. Sliding time windows will pre-aggregate on the granularity of the slide
+   * interval, so a few elements are stored per key (one per slide interval).
+   * Custom windows may not be able to pre-aggregate, or may need to store extra values in an
+   * aggregation tree.
+   *
+   * @param function The reduce function.
+   * @return The data stream that is the result of applying the reduce function to the window.
+   */
+  def reduce(function: (T, T) => T): DataStream[T] = {
+    if (function == null) {
+      throw new NullPointerException("Reduce function must not be null.")
+    }
+    val cleanFun = clean(function)
+    val reducer = new ReduceFunction[T] {
+      def reduce(v1: T, v2: T) = { cleanFun(v1, v2) }
+    }
+    reduce(reducer)
+  }
+
+  /**
+   * Applies the given fold function to each window. The window function is called for each
+   * evaluation of the window for each key individually. The output of the reduce function is
+   * interpreted as a regular non-windowed stream.
+   *
+   * @param function The fold function.
+   * @return The data stream that is the result of applying the fold function to the window.
+   */
+  def fold[R: TypeInformation: ClassTag](
+      initialValue: R,
+      function: FoldFunction[T,R]): DataStream[R] = {
+    if (function == null) {
+      throw new NullPointerException("Fold function must not be null.")
+    }
+
+    val resultType : TypeInformation[R] = implicitly[TypeInformation[R]]
+
+    javaStream.fold(initialValue, function, resultType)
+  }
+
+  /**
+   * Applies the given fold function to each window. The window function is called for each
+   * evaluation of the window for each key individually. The output of the reduce function is
+   * interpreted as a regular non-windowed stream.
+   *
+   * @param function The fold function.
+   * @return The data stream that is the result of applying the fold function to the window.
+   */
+  def fold[R: TypeInformation: ClassTag](initialValue: R, function: (R, T) => R): DataStream[R] = {
+    if (function == null) {
+      throw new NullPointerException("Fold function must not be null.")
+    }
+    val cleanFun = clean(function)
+    val folder = new FoldFunction[T,R] {
+      def fold(acc: R, v: T) = {
+        cleanFun(acc, v)
+      }
+    }
+    fold(initialValue, folder)
   }
 
   /**
@@ -110,6 +180,96 @@ class WindowedStream[T, K, W <: Window](javaStream: JavaWStream[T, K, W]) {
     javaStream.apply(clean(function), implicitly[TypeInformation[R]])
   }
 
+  // ------------------------------------------------------------------------
+  //  Aggregations on the keyed windows
+  // ------------------------------------------------------------------------
+
+  /**
+   * Applies an aggregation that that gives the maximum of the elements in the window at
+   * the given position.
+   */
+  def max(position: Int): DataStream[T] = aggregate(AggregationType.MAX, position)
+
+  /**
+   * Applies an aggregation that that gives the maximum of the elements in the window at
+   * the given field.
+   */
+  def max(field: String): DataStream[T] = aggregate(AggregationType.MAX, field)
+
+  /**
+   * Applies an aggregation that that gives the minimum of the elements in the window at
+   * the given position.
+   */
+  def min(position: Int): DataStream[T] = aggregate(AggregationType.MIN, position)
+
+  /**
+   * Applies an aggregation that that gives the minimum of the elements in the window at
+   * the given field.
+   */
+  def min(field: String): DataStream[T] = aggregate(AggregationType.MIN, field)
+
+  /**
+   * Applies an aggregation that sums the elements in the window at the given position.
+   */
+  def sum(position: Int): DataStream[T] = aggregate(AggregationType.SUM, position)
+
+  /**
+   * Applies an aggregation that sums the elements in the window at the given field.
+   */
+  def sum(field: String): DataStream[T] = aggregate(AggregationType.SUM, field)
+
+  /**
+   * Applies an aggregation that that gives the maximum element of the window by
+   * the given position. When equality, returns the first.
+   */
+  def maxBy(position: Int): DataStream[T] = aggregate(AggregationType.MAXBY,
+    position)
+
+  /**
+   * Applies an aggregation that that gives the maximum element of the window by
+   * the given field. When equality, returns the first.
+   */
+  def maxBy(field: String): DataStream[T] = aggregate(AggregationType.MAXBY,
+    field)
+
+  /**
+   * Applies an aggregation that that gives the minimum element of the window by
+   * the given position. When equality, returns the first.
+   */
+  def minBy(position: Int): DataStream[T] = aggregate(AggregationType.MINBY,
+    position)
+
+  /**
+   * Applies an aggregation that that gives the minimum element of the window by
+   * the given field. When equality, returns the first.
+   */
+  def minBy(field: String): DataStream[T] = aggregate(AggregationType.MINBY,
+    field)
+
+  private def aggregate(aggregationType: AggregationType, field: String): DataStream[T] = {
+    val position = fieldNames2Indices(getInputType(), Array(field))(0)
+    aggregate(aggregationType, position)
+  }
+
+  def aggregate(aggregationType: AggregationType, position: Int): DataStream[T] = {
+
+    val jStream = javaStream.asInstanceOf[JavaWStream[Product, K, W]]
+
+    val reducer = aggregationType match {
+      case AggregationType.SUM =>
+        new SumAggregator(position, jStream.getInputType, jStream.getExecutionEnvironment.getConfig)
+
+      case _ =>
+        new ComparableAggregator(
+          position,
+          jStream.getInputType,
+          aggregationType,
+          true,
+          jStream.getExecutionEnvironment.getConfig)
+    }
+
+    new DataStream[Product](jStream.reduce(reducer)).asInstanceOf[DataStream[T]]
+  }
 
   // ------------------------------------------------------------------------
   //  Utilities
@@ -123,4 +283,8 @@ class WindowedStream[T, K, W <: Window](javaStream: JavaWStream[T, K, W]) {
     new StreamExecutionEnvironment(javaStream.getExecutionEnvironment).scalaClean(f)
   }
 
+  /**
+   * Gets the output type.
+   */
+  private def getInputType(): TypeInformation[T] = javaStream.getInputType
 }

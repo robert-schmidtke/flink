@@ -618,7 +618,8 @@ class JobManager(
         // because this makes sure that the uploaded jar files are removed in case of
         // unsuccessful
         try {
-          libraryCacheManager.registerJob(jobGraph.getJobID, jobGraph.getUserJarBlobKeys)
+          libraryCacheManager.registerJob(jobGraph.getJobID, jobGraph.getUserJarBlobKeys,
+            jobGraph.getClasspaths)
         }
         catch {
           case t: Throwable =>
@@ -657,6 +658,7 @@ class JobManager(
               jobGraph.getJobConfiguration,
               timeout,
               jobGraph.getUserJarBlobKeys,
+              jobGraph.getClasspaths,
               userCodeLoader)
             val jobInfo = JobInfo(
               client,
@@ -1188,15 +1190,23 @@ object JobManager {
         LOG.info("Security is enabled. Starting secure JobManager.")
         SecurityUtils.runSecured(new FlinkSecuredRunner[Unit] {
           override def run(): Unit = {
-            runJobManager(configuration, executionMode, streamingMode,
-                          listeningHost, listeningPort)
+            runJobManager(
+              configuration,
+              executionMode,
+              streamingMode,
+              listeningHost,
+              listeningPort)
           }
         })
       }
       else {
         LOG.info("Security is not enabled. Starting non-authenticated JobManager.")
-        runJobManager(configuration, executionMode, streamingMode,
-                      listeningHost, listeningPort)
+        runJobManager(
+          configuration,
+          executionMode,
+          streamingMode,
+          listeningHost,
+          listeningPort)
       }
     }
     catch {
@@ -1217,7 +1227,7 @@ object JobManager {
    *
    * @param configuration The configuration object for the JobManager.
    * @param executionMode The execution mode in which to run. Execution mode LOCAL will spawn an
-   *                      an additional TaskManager in the same process.
+   *                      additional TaskManager in the same process.
    * @param streamingMode The streaming mode to run the system in (streaming vs. batch-only)
    * @param listeningAddress The hostname where the JobManager should listen for messages.
    * @param listeningPort The port where the JobManager should listen for messages.
@@ -1229,6 +1239,43 @@ object JobManager {
       listeningAddress: String,
       listeningPort: Int)
     : Unit = {
+    
+    val (jobManagerSystem, _, _, _) = startActorSystemAndJobManagerActors(
+      configuration,
+      executionMode,
+      streamingMode,
+      listeningAddress,
+      listeningPort,
+      classOf[JobManager],
+      classOf[MemoryArchivist]
+    )
+
+    // block until everything is shut down
+    jobManagerSystem.awaitTermination()
+  }
+
+  /** Starts an ActorSystem, the JobManager and all its components including the WebMonitor.
+    *
+    * @param configuration The configuration object for the JobManager
+    * @param executionMode The execution mode in which to run. Execution mode LOCAL with spawn an
+    *                      additional TaskManager in the same process.
+    * @param streamingMode The streaming mode to run the system in (streaming vs. batch-only)
+    * @param listeningAddress The hostname where the JobManager should lsiten for messages.
+    * @param listeningPort The port where the JobManager should listen for messages
+    * @param jobManagerClass The class of the JobManager to be started
+    * @param archiveClass The class of the Archivist to be started
+    * @return A tuple containing the started ActorSystem, ActorRefs to the JobManager and the
+    *         Archivist and an Option containing a possibly started WebMonitor
+    */
+  def startActorSystemAndJobManagerActors(
+      configuration: Configuration,
+      executionMode: JobManagerMode,
+      streamingMode: StreamingMode,
+      listeningAddress: String,
+      listeningPort: Int,
+      jobManagerClass: Class[_ <: JobManager],
+      archiveClass: Class[_ <: MemoryArchivist])
+    : (ActorSystem, ActorRef, ActorRef, Option[WebMonitor]) = {
 
     LOG.info("Starting JobManager")
 
@@ -1266,7 +1313,9 @@ object JobManager {
       val (jobManager, archive) = startJobManagerActors(
         configuration,
         jobManagerSystem,
-        streamingMode)
+        streamingMode,
+        jobManagerClass,
+        archiveClass)
 
       // start a process reaper that watches the JobManager. If the JobManager actor dies,
       // the process reaper will kill the JVM process (to ensure easy failure detection)
@@ -1303,7 +1352,10 @@ object JobManager {
           "TaskManager_Process_Reaper")
       }
 
-      if(configuration.getInteger(ConfigConstants.JOB_MANAGER_WEB_PORT_KEY, 0) >= 0) {
+      val webMonitor = if (
+        configuration.getInteger(
+          ConfigConstants.JOB_MANAGER_WEB_PORT_KEY,
+          0) >= 0) {
 
         // TODO: Add support for HA. Webserver has to work in dedicated mode. All transferred
         // information has to be made serializable
@@ -1333,7 +1385,13 @@ object JobManager {
         if(webServer != null) {
           webServer.start()
         }
+
+        Option(webServer)
+      } else {
+        None
       }
+
+      (jobManagerSystem, jobManager, archive, webMonitor)
     }
     catch {
       case t: Throwable => {
@@ -1346,9 +1404,6 @@ object JobManager {
         throw t
       }
     }
-
-    // block until everything is shut down
-    jobManagerSystem.awaitTermination()
   }
 
   /**
@@ -1462,14 +1517,17 @@ object JobManager {
    *              delayBetweenRetries, timeout)
    *
    * @param configuration The configuration from which to parse the config values.
+   * @param leaderElectionServiceOption LeaderElectionService which shall be returned if the option
+   *                                    is defined
    * @return The members for a default JobManager.
    */
-  def createJobManagerComponents(configuration: Configuration) :
+  def createJobManagerComponents(
+      configuration: Configuration,
+      leaderElectionServiceOption: Option[LeaderElectionService]) :
     (ExecutionContext,
     InstanceManager,
     FlinkScheduler,
     BlobLibraryCacheManager,
-    Props,
     Int, // execution retries
     Long, // delay between retries
     FiniteDuration, // timeout
@@ -1478,9 +1536,6 @@ object JobManager {
 
     val timeout: FiniteDuration = AkkaUtils.getTimeout(configuration)
 
-    val archiveCount = configuration.getInteger(ConfigConstants.JOB_MANAGER_WEB_ARCHIVE_COUNT,
-      ConfigConstants.DEFAULT_JOB_MANAGER_WEB_ARCHIVE_COUNT)
-
     val cleanupInterval = configuration.getLong(
       ConfigConstants.LIBRARY_CACHE_MANAGER_CLEANUP_INTERVAL,
       ConfigConstants.DEFAULT_LIBRARY_CACHE_MANAGER_CLEANUP_INTERVAL) * 1000
@@ -1488,6 +1543,9 @@ object JobManager {
     val executionRetries = configuration.getInteger(
       ConfigConstants.DEFAULT_EXECUTION_RETRIES_KEY,
       ConfigConstants.DEFAULT_EXECUTION_RETRIES)
+
+    val archiveCount = configuration.getInteger(ConfigConstants.JOB_MANAGER_WEB_ARCHIVE_COUNT,
+      ConfigConstants.DEFAULT_JOB_MANAGER_WEB_ARCHIVE_COUNT)
 
     // configure the delay between execution retries.
     // unless explicitly specifies, this is dependent on the heartbeat timeout
@@ -1504,8 +1562,6 @@ object JobManager {
           s"Invalid config value for ${ConfigConstants.DEFAULT_EXECUTION_RETRY_DELAY_KEY}: " +
             s"${pauseString}. Value must be a valid duration (such as 100 milli or 1 min)");
       }
-
-    val archiveProps: Props = Props(classOf[MemoryArchivist], archiveCount)
 
     val executionContext = ExecutionContext.fromExecutor(new ForkJoinPool())
 
@@ -1540,13 +1596,15 @@ object JobManager {
       }
     }
 
-    val leaderElectionService = LeaderElectionUtils.createLeaderElectionService(configuration)
+    val leaderElectionService = leaderElectionServiceOption match {
+      case Some(les) => les
+      case None => LeaderElectionUtils.createLeaderElectionService(configuration)
+    }
 
     (executionContext,
       instanceManager,
       scheduler,
       libraryCacheManager,
-      archiveProps,
       executionRetries,
       delayBetweenRetries,
       timeout, 
@@ -1559,13 +1617,19 @@ object JobManager {
    * given actor system.
    *
    * @param configuration The configuration for the JobManager
-   * @param actorSystem Teh actor system running the JobManager
+   * @param actorSystem The actor system running the JobManager
+   * @param streamingMode The execution mode
+   * @param jobManagerClass The class of the JobManager to be started
+   * @param archiveClass The class of the MemoryArchivist to be started
+   *
    * @return A tuple of references (JobManager Ref, Archiver Ref)
    */
   def startJobManagerActors(
       configuration: Configuration,
       actorSystem: ActorSystem,
-      streamingMode: StreamingMode)
+      streamingMode: StreamingMode,
+      jobManagerClass: Class[_ <: JobManager],
+      archiveClass: Class[_ <: MemoryArchivist])
     : (ActorRef, ActorRef) = {
 
     startJobManagerActors(
@@ -1573,7 +1637,9 @@ object JobManager {
       actorSystem,
       Some(JOB_MANAGER_NAME),
       Some(ARCHIVE_NAME),
-      streamingMode)
+      streamingMode,
+      jobManagerClass,
+      archiveClass)
   }
   /**
    * Starts the JobManager and job archiver based on the given configuration, in the
@@ -1586,6 +1652,8 @@ object JobManager {
    * @param archiveActorName Optionally the name of the archive actor. If none is given,
    *                          the actor will have the name generated by the actor system.
    * @param streamingMode The mode to run the system in (streaming vs. batch-only)
+   * @param jobManagerClass The class of the JobManager to be started
+   * @param archiveClass The class of the MemoryArchivist to be started
    * 
    * @return A tuple of references (JobManager Ref, Archiver Ref)
    */
@@ -1594,19 +1662,24 @@ object JobManager {
       actorSystem: ActorSystem,
       jobMangerActorName: Option[String],
       archiveActorName: Option[String],
-      streamingMode: StreamingMode)
+      streamingMode: StreamingMode,
+      jobManagerClass: Class[_ <: JobManager],
+      archiveClass: Class[_ <: MemoryArchivist])
     : (ActorRef, ActorRef) = {
 
     val (executionContext,
       instanceManager,
       scheduler,
       libraryCacheManager,
-      archiveProps,
       executionRetries,
       delayBetweenRetries,
       timeout,
-      _,
-      leaderElectionService) = createJobManagerComponents(configuration)
+      archiveCount,
+      leaderElectionService) = createJobManagerComponents(
+      configuration,
+      None)
+
+    val archiveProps = Props(archiveClass, archiveCount)
 
     // start the archiver with the given name, or without (avoid name conflicts)
     val archive: ActorRef = archiveActorName match {
@@ -1615,7 +1688,7 @@ object JobManager {
     }
 
     val jobManagerProps = Props(
-      classOf[JobManager],
+      jobManagerClass,
       configuration,
       executionContext,
       instanceManager,

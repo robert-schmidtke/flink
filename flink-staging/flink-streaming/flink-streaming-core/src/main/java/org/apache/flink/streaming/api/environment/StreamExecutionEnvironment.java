@@ -69,9 +69,9 @@ import org.apache.flink.streaming.api.transformations.StreamTransformation;
 import org.apache.flink.types.StringValue;
 import org.apache.flink.util.SplittableIterator;
 
-import java.io.File;
 import java.io.IOException;
 import java.io.Serializable;
+import java.net.URL;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -541,11 +541,23 @@ public abstract class StreamExecutionEnvironment {
 	/**
 	 * Sets the time characteristic for all streams create from this environment, e.g., processing
 	 * time, event time, or ingestion time.
+	 *
+	 * <p>
+	 * If you set the characteristic to IngestionTime of EventTime this will set a default
+	 * watermark update interval of 200 ms. If this is not applicable for your application
+	 * you should change it using {@link ExecutionConfig#setAutoWatermarkInterval(long)}.
 	 * 
 	 * @param characteristic The time characteristic.
 	 */
 	public void setStreamTimeCharacteristic(TimeCharacteristic characteristic) {
 		this.timeCharacteristic = Objects.requireNonNull(characteristic);
+		if (characteristic == TimeCharacteristic.ProcessingTime) {
+			getConfig().disableTimestamps();
+			getConfig().setAutoWatermarkInterval(0);
+		} else {
+			getConfig().enableTimestamps();
+			getConfig().setAutoWatermarkInterval(200);
+		}
 	}
 
 	/**
@@ -1273,7 +1285,7 @@ public abstract class StreamExecutionEnvironment {
 		ExecutionEnvironment env = ExecutionEnvironment.getExecutionEnvironment();
 		if (env instanceof ContextEnvironment) {
 			ContextEnvironment ctx = (ContextEnvironment) env;
-			return createContextEnvironment(ctx.getClient(), ctx.getJars(),
+			return createContextEnvironment(ctx.getClient(), ctx.getJars(), ctx.getClasspaths(),
 					ctx.getParallelism(), ctx.isWait());
 		} else if (env instanceof OptimizerPlanEnvironment | env instanceof PreviewPlanEnvironment) {
 			return new StreamPlanEnvironment(env);
@@ -1283,9 +1295,9 @@ public abstract class StreamExecutionEnvironment {
 	}
 
 	private static StreamExecutionEnvironment createContextEnvironment(
-			Client client, List<File> jars, int parallelism, boolean wait)
+			Client client, List<URL> jars, List<URL> classpaths, int parallelism, boolean wait)
 	{
-		return new StreamContextEnvironment(client, jars, parallelism, wait);
+		return new StreamContextEnvironment(client, jars, classpaths, parallelism, wait);
 	}
 
 	/**
