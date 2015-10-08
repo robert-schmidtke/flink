@@ -299,10 +299,12 @@ public class CliFrontend {
 		try {
 			int userParallelism = options.getParallelism();
 			LOG.debug("User parallelism is set to {}", userParallelism);
+			System.out.println("User parallelism is set to " + userParallelism);
 
 			Client client = getClient(options, program.getMainClassName(), userParallelism);
 			client.setPrintStatusDuringExecution(options.getStdoutLogging());
 			LOG.debug("Client slots is set to {}", client.getMaxSlots());
+			System.out.println("Client slots is set to " + client.getMaxSlots());
 
 			try {
 				if (client.getMaxSlots() != -1 && userParallelism == -1) {

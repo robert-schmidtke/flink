@@ -693,6 +693,7 @@ class JobManager(
         }
 
         val numSlots = scheduler.getTotalNumberOfSlots()
+        log.debug(s"numSlots: ${numSlots}")
 
         for (vertex <- jobGraph.getVertices.asScala) {
 
@@ -702,6 +703,7 @@ class JobManager(
               s"The vertex ${vertex.getID} (${vertex.getName}) has no invokable class.")
           }
 
+              log.debug(s"Vertex '${vertex.getName()}' has prev. parallelism ${vertex.getParallelism}")
               if (vertex.getParallelism() == ExecutionConfig.PARALLELISM_AUTO_MAX) {
                 vertex.setParallelism(numSlots)
               }
