@@ -107,6 +107,15 @@ under the License.
 			<fileMode>0644</fileMode>
 			<includes>
 				<include>*.txt</include>
+			</includes>
+		</fileSet>
+
+		<!-- copy LICENSE/NOTICE files -->
+		<fileSet>
+			<directory>../</directory>
+			<outputDirectory></outputDirectory>
+			<fileMode>0644</fileMode>
+			<includes>
 				<include>LICENSE*</include>
 				<include>NOTICE*</include>
 			</includes>
@@ -123,13 +132,6 @@ under the License.
 			<fileMode>0644</fileMode>
 		</fileSet>
 
-		<!-- copy the web documents -->
-		<fileSet>
-			<directory>../flink-runtime-web/web-dashboard/web</directory>
-			<outputDirectory>resources/web-runtime-monitor</outputDirectory>
-			<fileMode>0644</fileMode>
-		</fileSet>
-		
 		<!-- copy the tools -->
 		<fileSet>
 			<directory>src/main/flink-bin/tools</directory>
@@ -168,7 +170,7 @@ under the License.
 
 		<!-- copy python package -->
 		<fileSet>
-			<directory>../flink-staging/flink-language-binding/flink-python/src/main/python/org/apache/flink/languagebinding/api/python</directory>
+			<directory>../flink-libraries/flink-python/src/main/python/org/apache/flink/python/api</directory>
 			<outputDirectory>resources/python</outputDirectory>
 			<fileMode>0755</fileMode>
 		</fileSet>

@@ -29,8 +29,9 @@ import grizzled.slf4j.Logger
 import org.apache.flink.api.common.JobID
 import org.apache.flink.configuration.{Configuration => FlinkConfiguration, ConfigConstants}
 import org.apache.flink.runtime.akka.AkkaUtils
+import org.apache.flink.runtime.checkpoint.CheckpointRecoveryFactory
 import org.apache.flink.runtime.jobgraph.JobStatus
-import org.apache.flink.runtime.jobmanager.JobManager
+import org.apache.flink.runtime.jobmanager.{SubmittedJobGraphStore, JobManager}
 import org.apache.flink.runtime.leaderelection.LeaderElectionService
 import org.apache.flink.runtime.messages.JobManagerMessages.{RequestJobStatus, CurrentJobStatus,
 JobNotFound}
@@ -88,7 +89,9 @@ class YarnJobManager(
     delayBetweenRetries: Long,
     timeout: FiniteDuration,
     mode: StreamingMode,
-    leaderElectionService: LeaderElectionService)
+    leaderElectionService: LeaderElectionService,
+    submittedJobGraphs : SubmittedJobGraphStore,
+    checkpointRecoveryFactory : CheckpointRecoveryFactory)
   extends JobManager(
     flinkConfiguration,
     executionContext,
@@ -100,7 +103,9 @@ class YarnJobManager(
     delayBetweenRetries,
     timeout,
     mode,
-    leaderElectionService) {
+    leaderElectionService,
+    submittedJobGraphs,
+    checkpointRecoveryFactory) {
 
   import context._
   import scala.collection.JavaConverters._
@@ -686,8 +691,8 @@ class YarnJobManager(
     }
 
     tmCommand ++= s" ${taskManagerRunnerClass.getName} --configDir . 1> " +
-      s"${ApplicationConstants.LOG_DIR_EXPANSION_VAR}/taskmanager-stdout.log 2> " +
-      s"${ApplicationConstants.LOG_DIR_EXPANSION_VAR}/taskmanager-stderr.log"
+      s"${ApplicationConstants.LOG_DIR_EXPANSION_VAR}/taskmanager.out 2> " +
+      s"${ApplicationConstants.LOG_DIR_EXPANSION_VAR}/taskmanager.err"
 
     tmCommand ++= " --streamingMode"
     if(streamingMode) {

@@ -23,7 +23,6 @@ import static org.apache.flink.runtime.operators.DamBehavior.MATERIALIZING;
 import static org.apache.flink.runtime.operators.DamBehavior.PIPELINED;
 import org.apache.flink.runtime.operators.chaining.ChainedAllReduceDriver;
 
-import org.apache.flink.runtime.operators.chaining.ChainedCollectorMapDriver;
 import org.apache.flink.runtime.operators.chaining.ChainedDriver;
 import org.apache.flink.runtime.operators.chaining.ChainedFlatMapDriver;
 import org.apache.flink.runtime.operators.chaining.ChainedMapDriver;
@@ -40,8 +39,6 @@ public enum DriverStrategy {
 	// a binary no-op operator. non implementation available
 	BINARY_NO_OP(null, null, PIPELINED, PIPELINED, 0),
 
-	// the old mapper
-	COLLECTOR_MAP(CollectorMapDriver.class, ChainedCollectorMapDriver.class, PIPELINED, 0),
 	// the proper mapper
 	MAP(MapDriver.class, ChainedMapDriver.class, PIPELINED, 0),
 
@@ -73,11 +70,8 @@ public enum DriverStrategy {
 
 	// both inputs are merged, but materialized to the side for block-nested-loop-join among values with equal key
 	INNER_MERGE(JoinDriver.class, null, MATERIALIZING, MATERIALIZING, 2),
-
 	LEFT_OUTER_MERGE(LeftOuterJoinDriver.class, null, MATERIALIZING, MATERIALIZING, 2),
-
 	RIGHT_OUTER_MERGE(RightOuterJoinDriver.class, null, MATERIALIZING, MATERIALIZING, 2),
-
 	FULL_OUTER_MERGE(FullOuterJoinDriver.class, null, MATERIALIZING, MATERIALIZING, 2),
 
 	// co-grouping inputs
@@ -94,6 +88,11 @@ public enum DriverStrategy {
 	HYBRIDHASH_BUILD_FIRST_CACHED(BuildFirstCachedJoinDriver.class, null, FULL_DAM, MATERIALIZING, 2),
 	//  cached variant of HYBRIDHASH_BUILD_SECOND, that can only be used inside of iterations
 	HYBRIDHASH_BUILD_SECOND_CACHED(BuildSecondCachedJoinDriver.class, null, MATERIALIZING, FULL_DAM, 2),
+
+	// right outer join, the first input is build side, the second side is probe side of a hybrid hash table
+	RIGHT_HYBRIDHASH_BUILD_FIRST(RightOuterJoinDriver.class, null, FULL_DAM, MATERIALIZING, 2),
+	// left outer join, the second input is build side, the first side is probe side of a hybrid hash table
+	LEFT_HYBRIDHASH_BUILD_SECOND(LeftOuterJoinDriver.class, null, MATERIALIZING, FULL_DAM, 2),
 	
 	// the second input is inner loop, the first input is outer loop and block-wise processed
 	NESTEDLOOP_BLOCKED_OUTER_FIRST(CrossDriver.class, null, MATERIALIZING, FULL_DAM, 0),

@@ -34,13 +34,12 @@ import org.apache.flink.runtime.akka.AkkaUtils
 import org.apache.flink.runtime.client.{JobExecutionException, JobClient}
 import org.apache.flink.runtime.instance.{AkkaActorGateway, ActorGateway}
 import org.apache.flink.runtime.jobgraph.JobGraph
-import org.apache.flink.runtime.jobmanager.web.WebInfoServer
 import org.apache.flink.runtime.jobmanager.{JobManager, RecoveryMode}
 import org.apache.flink.runtime.leaderretrieval.{LeaderRetrievalService, LeaderRetrievalListener,
 StandaloneLeaderRetrievalService}
 import org.apache.flink.runtime.messages.TaskManagerMessages.NotifyWhenRegisteredAtAnyJobManager
-import org.apache.flink.runtime.util.{StandaloneUtils, ZooKeeperUtils}
-import org.apache.flink.runtime.webmonitor.WebMonitor
+import org.apache.flink.runtime.util.{LeaderRetrievalUtils, StandaloneUtils, ZooKeeperUtils}
+import org.apache.flink.runtime.webmonitor.{WebMonitorUtils, WebMonitor}
 
 import org.slf4j.LoggerFactory
 
@@ -95,9 +94,7 @@ abstract class FlinkMiniCluster(
 
   implicit val timeout = AkkaUtils.getTimeout(userConfiguration)
 
-  val recoveryMode = RecoveryMode.valueOf(configuration.getString(
-    ConfigConstants.RECOVERY_MODE,
-    ConfigConstants.DEFAULT_RECOVERY_MODE).toUpperCase)
+  val recoveryMode = RecoveryMode.fromConfig(configuration)
 
   val numJobManagers = getNumberOfJobManagers
 
@@ -285,26 +282,17 @@ abstract class FlinkMiniCluster(
     if(
       config.getBoolean(ConfigConstants.LOCAL_START_WEBSERVER, false) &&
         config.getInteger(ConfigConstants.JOB_MANAGER_WEB_PORT_KEY, 0) >= 0) {
-
+      
       // TODO: Add support for HA: Make web server work independently from the JM
       val leaderRetrievalService = new StandaloneLeaderRetrievalService(jobManagerAkkaURL)
 
-      // start the job manager web frontend
-      val webServer = if (
-        config.getBoolean(
-          ConfigConstants.JOB_MANAGER_NEW_WEB_FRONTEND_KEY,
-          false)) {
+      LOG.info("Starting JobManger web frontend")
+      // start the new web frontend. we need to load this dynamically
+      // because it is not in the same project/dependencies
+      val webServer = WebMonitorUtils.startWebRuntimeMonitor(
+        config, leaderRetrievalService, actorSystem)
 
-        LOG.info("Starting NEW JobManger web frontend")
-        // start the new web frontend. we need to load this dynamically
-        // because it is not in the same project/dependencies
-        JobManager.startWebRuntimeMonitor(config, leaderRetrievalService, actorSystem)
-      } else {
-        LOG.info("Starting JobManger web frontend")
-        new WebInfoServer(config, leaderRetrievalService, actorSystem)
-      }
-
-      webServer.start()
+      webServer.start(jobManagerAkkaURL)
 
       Option(webServer)
     } else {
@@ -400,29 +388,29 @@ abstract class FlinkMiniCluster(
     : JobExecutionResult = {
     submitJobAndWait(jobGraph, printUpdates, timeout)
   }
+
+  def submitJobAndWait(
+    jobGraph: JobGraph,
+    printUpdates: Boolean,
+    timeout: FiniteDuration)
+  : JobExecutionResult = {
+    submitJobAndWait(jobGraph, printUpdates, timeout, createLeaderRetrievalService())
+  }
   
   @throws(classOf[JobExecutionException])
   def submitJobAndWait(
       jobGraph: JobGraph,
       printUpdates: Boolean,
-      timeout: FiniteDuration)
+      timeout: FiniteDuration,
+      leaderRetrievalService: LeaderRetrievalService)
     : JobExecutionResult = {
 
     val clientActorSystem = startJobClientActorSystem(jobGraph.getJobID)
 
      try {
-       val jobManagerGateway = try {
-           getLeaderGateway(timeout)
-         } catch {
-           case e: Exception => throw new JobExecutionException(
-             jobGraph.getJobID,
-             "Could not retrieve leading job manager gateway.",
-             e)
-         }
-
      JobClient.submitJobAndWait(
        clientActorSystem,
-       jobManagerGateway,
+       leaderRetrievalService,
        jobGraph,
        timeout,
        printUpdates,

@@ -52,7 +52,7 @@ Kafka exploits this ability.
 ## Checkpointing
 
 The central part of Flink's fault tolerance mechanism is drawing consistent snapshots of the distributed data stream and operator state.
-These shapshots act as consistent checkpoints to which the system can fall back in case of a failure. Flink's mechanism for drawing these
+These snapshots act as consistent checkpoints to which the system can fall back in case of a failure. Flink's mechanism for drawing these
 snapshots is described in "[Lightweight Asynchronous Snapshots for Distributed Dataflows](http://arxiv.org/abs/1506.08603)". It is inspired by 
 the standard [Chandy-Lamport algorithm](http://research.microsoft.com/en-us/um/people/lamport/pubs/chandy.pdf) for distributed snapshots and is 
 specifically tailored to Flink's execution model.
@@ -141,7 +141,7 @@ It is possible to let an operator continue processing while it stores its state 
 After receiving the checkpoint barriers on its inputs, the operator starts the asynchronous snapshot copying of its state. It immediately emits the barrier to its outputs and continues with the regular stream processing. Once the background copy process has completed, it acknowledges the checkpoint to the checkpoint coordinator (the JobManager). The checkpoint is now only complete after all sinks received the barriers and all stateful operators acknowledged their completed backup (which may be later than the barriers reaching the sinks).
 
 User-defined state that is used through the key/value state abstraction can be snapshotted *asynchronously*.
-User functions that implement the interface {% gh_link /flink-staging/flink-streaming/flink-streaming-core/src/main/java/org/apache/flink/streaming/api/checkpoint/Checkpointed.java "Checkpointed" %} will be snapshotted *synchronously*, while functions that implement {% gh_link /flink-staging/flink-streaming/flink-streaming-core/src/main/java/org/apache/flink/streaming/api/checkpoint/CheckpointedAsynchronously.java "CheckpointedAsynchronously" %} will be snapshotted *asynchronously*. Note that for the latter, the user function must guarantee that any future modifications to its state to not affect the state object returned by the `snapshotState()` method.
+User functions that implement the interface {% gh_link /flink-staging/flink-streaming/flink-streaming-java/src/main/java/org/apache/flink/streaming/api/checkpoint/Checkpointed.java "Checkpointed" %} will be snapshotted *synchronously*, while functions that implement {% gh_link /flink-staging/flink-streaming/flink-streaming-java/src/main/java/org/apache/flink/streaming/api/checkpoint/CheckpointedAsynchronously.java "CheckpointedAsynchronously" %} will be snapshotted *asynchronously*. Note that for the latter, the user function must guarantee that any future modifications to its state to not affect the state object returned by the `snapshotState()` method.
 
 
 

@@ -21,11 +21,11 @@
 #Please ask @rmetzger (on GitHub) before changing anything here. It contains some magic.
 
 # Build Responsibilities
-# 1. Deploy snapshot & S3 (hadoop1)
-# 2. Deploy snapshot & S3 (hadoop2)
+# 1. Nothing
+# 2. Nothing
 # 3. Nothing
-# 4. Nothing
-# 5. Nothing
+# 4. Deploy snapshot & S3 (hadoop2)
+# 5. Deploy snapshot & S3 (hadoop1)
 
 
 function getVersion() {
@@ -45,11 +45,23 @@ function deploy_to_s3() {
 	CURRENT_FLINK_VERSION=$1
 	HD=$2
 
-	echo "Deplyoing flink version $CURRENT_FLINK_VERSION (hadoop=$HD) to s3:"
+	echo "Installing artifacts deployment script"
+	export ARTIFACTS_DEST="$HOME/bin/artifacts"
+	curl -sL https://raw.githubusercontent.com/travis-ci/artifacts/master/install | bash
+	PATH="$(dirname "$ARTIFACTS_DEST"):$PATH"
+
+	echo "Deploying flink version $CURRENT_FLINK_VERSION (hadoop=$HD) to s3:"
 	mkdir flink-$CURRENT_FLINK_VERSION
 	cp -r flink-dist/target/flink-*-bin/flink-$CURRENT_FLINK_VERSION*/* flink-$CURRENT_FLINK_VERSION/
 	tar -czf flink-$CURRENT_FLINK_VERSION-bin-$HD.tgz flink-$CURRENT_FLINK_VERSION
-	travis-artifacts upload --path flink-$CURRENT_FLINK_VERSION-bin-$HD.tgz   --target-path / 
+
+	artifacts upload \
+		  --bucket $ARTIFACTS_S3_BUCKET \
+		  --key $ARTIFACTS_AWS_ACCESS_KEY_ID \
+		  --secret $ARTIFACTS_AWS_SECRET_ACCESS_KEY \
+		  --target-paths / \
+		  flink-$CURRENT_FLINK_VERSION-bin-$HD.tgz
+
 	# delete files again
 	rm -rf flink-$CURRENT_FLINK_VERSION
 	rm flink-$CURRENT_FLINK_VERSION-bin-$HD.tgz
@@ -83,7 +95,7 @@ if [[ $TRAVIS_PULL_REQUEST == "false" ]] && [[ $TRAVIS_REPO_SLUG == "apache/flin
 	# It will deploy both a hadoop v1 and a hadoop v2 (yarn) artifact
 	# 
 
-	if [[ $TRAVIS_JOB_NUMBER == *1 ]] &&  [[ $CURRENT_FLINK_VERSION == *SNAPSHOT* ]] ; then 
+	if [[ $TRAVIS_JOB_NUMBER == *5 ]] &&  [[ $CURRENT_FLINK_VERSION == *SNAPSHOT* ]] ; then 
 		# Deploy hadoop v1 to maven
 		echo "Generating poms for hadoop1"
 		./tools/generate_specific_pom.sh $CURRENT_FLINK_VERSION $CURRENT_FLINK_VERSION_HADOOP1 pom.hadoop1.xml
@@ -93,7 +105,7 @@ if [[ $TRAVIS_PULL_REQUEST == "false" ]] && [[ $TRAVIS_REPO_SLUG == "apache/flin
 		deploy_to_s3 $CURRENT_FLINK_VERSION "hadoop1"
 	fi
 
-	if [[ $TRAVIS_JOB_NUMBER == *2 ]] && [[ $CURRENT_FLINK_VERSION == *SNAPSHOT* ]] ; then 
+	if [[ $TRAVIS_JOB_NUMBER == *4 ]] && [[ $CURRENT_FLINK_VERSION == *SNAPSHOT* ]] ; then 
 		# the time to build and upload flink twice (scala 2.10 and scala 2.11) takes
 		# too much time. That's why we are going to do it in parallel
 		# Note that the parallel execution will cause the output to be interleaved

@@ -12,18 +12,20 @@ install: true
 language: java
 
 #See https://issues.apache.org/jira/browse/FLINK-1072
+# NOTE: When changing the build matrix, please also check with the tools/deploy_to_maven.sh file
+# The file assumes a certain build order for the maven / nigthly build deployments.
 matrix:
   include:
-    - jdk: "openjdk7" # this uploads the Hadoop 1 build to Maven and S3
-      env: PROFILE="-Dhadoop.profile=1"
-    - jdk: "oraclejdk7" # this uploads the Hadoop 2 build to Maven and S3
-      env: PROFILE="-Dhadoop.version=2.3.0"
+    - jdk: "oraclejdk8"
+      env: PROFILE="-Dhadoop.version=2.7.1 -Dscala-2.11 -Pinclude-tez -Pinclude-yarn-tests"
+    - jdk: "oraclejdk8"
+      env: PROFILE="-Dhadoop.version=2.5.0 -Pinclude-yarn-tests"
     - jdk: "openjdk7"
       env: PROFILE="-Dhadoop.version=2.4.0 -Dscala-2.11 -Pinclude-yarn-tests"
-    - jdk: "oraclejdk8"
-      env: PROFILE="-Dhadoop.version=2.5.0 -Dmaven.javadoc.skip=true -Pinclude-yarn-tests"
-    - jdk: "oraclejdk8"
-      env: PROFILE="-Dhadoop.version=2.6.0 -Dscala-2.11 -Pinclude-tez -Pinclude-yarn-tests -Dmaven.javadoc.skip=true"
+    - jdk: "oraclejdk7" # this uploads the Hadoop 2 build to Maven and S3
+      env: PROFILE="-Dhadoop.version=2.3.0"
+    - jdk: "openjdk7" # this uploads the Hadoop 1 build to Maven and S3
+      env: PROFILE="-Dhadoop.profile=1"
 
 
 git:
@@ -39,7 +41,7 @@ notifications:
     secure: iYjxJn8OkCRslJ30/PcE+EbMiqfKwsvUJiVUEQAEXqCEwZg+wYDsN0ilPQQT0zU16mYWKoMTx71zrOZpjirGq7ww0XZ0wAfXDjgmTxX/DaEdp87uNgTRdQzLV7mQouMKZni28eoa08Rb2NIoLLQ39q7uCu0W/p7vAD2e9xHlBBE=
 
 env:
-    global: 
+    global:
         # Global variable to avoid hanging travis builds when downloading cache archives.
         - MALLOC_ARENA_MAX=2
         # username and password for Apache Nexus (maven deploy)
@@ -56,7 +58,6 @@ env:
 
 before_script:
    - "gem install --no-document --version 0.8.9 faraday "
-   - "gem install --no-document travis-artifacts & "
 
 # We run mvn and monitor its output. If there is no output for the specified number of seconds, we
 # print the stack traces of all running Java processes.

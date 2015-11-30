@@ -34,16 +34,16 @@ class FlinkILoop(
     out0: JPrintWriter)
   extends ILoopCompat(in0, out0) {
 
-  def this(host:String, 
-           port:Int, 
-           externalJars : Option[Array[String]], 
+  def this(host: String,
+           port: Int,
+           externalJars: Option[Array[String]],
            in0: BufferedReader, 
            out: JPrintWriter){
-    this(host:String, port:Int, externalJars, Some(in0), out)
+    this(host: String, port: Int, externalJars, Some(in0), out)
   }
 
-  def this(host:String, port:Int, externalJars : Option[Array[String]]){
-    this(host:String,port: Int, externalJars , None, new JPrintWriter(Console.out, true))
+  def this(host: String, port: Int, externalJars: Option[Array[String]]){
+    this(host: String, port: Int, externalJars, None, new JPrintWriter(Console.out, true))
   }
   
   def this(host: String, port: Int, in0: BufferedReader, out: JPrintWriter){
@@ -96,8 +96,22 @@ class FlinkILoop(
   }
 
   private val packageImports = Seq[String](
+    "org.apache.flink.core.fs._",
+    "org.apache.flink.core.fs.local._",
+    "org.apache.flink.api.common.io._",
+    "org.apache.flink.api.common.aggregators._",
+    "org.apache.flink.api.common.accumulators._",
+    "org.apache.flink.api.common.distributions._",
+    "org.apache.flink.api.common.operators._",
+    "org.apache.flink.api.common.operators.base.JoinOperatorBase.JoinHint",
+    "org.apache.flink.api.common.functions._",
+    "org.apache.flink.api.java.io._",
+    "org.apache.flink.api.java.aggregation._",
+    "org.apache.flink.api.java.functions._",
+    "org.apache.flink.api.java.operators._",
+    "org.apache.flink.api.java.sampling._",
     "org.apache.flink.api.scala._",
-    "org.apache.flink.api.common.functions._"
+    "org.apache.flink.api.scala.utils._"
   )
 
   override def createInterpreter(): Unit = {
@@ -161,11 +175,6 @@ class FlinkILoop(
   }
 
   /**
-   * CUSTOM START METHODS OVERRIDE:
-   */
-  override def prompt = "Scala-Flink> "
-
-  /**
    * custom welcome message
    */
   override def printWelcome() {
@@ -219,6 +228,5 @@ HINT: You can use print() on a DataSet to print the contents to this shell.
   }
 
   def getExternalJars(): Array[String] = externalJars.getOrElse(Array.empty[String])
-
 }
 

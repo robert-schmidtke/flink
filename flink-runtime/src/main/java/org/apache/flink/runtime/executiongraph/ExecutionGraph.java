@@ -30,6 +30,8 @@ import org.apache.flink.runtime.accumulators.AccumulatorRegistry;
 import org.apache.flink.runtime.accumulators.StringifiedAccumulatorResult;
 import org.apache.flink.runtime.blob.BlobKey;
 import org.apache.flink.runtime.checkpoint.CheckpointCoordinator;
+import org.apache.flink.runtime.checkpoint.CheckpointIDCounter;
+import org.apache.flink.runtime.checkpoint.CompletedCheckpointStore;
 import org.apache.flink.runtime.execution.ExecutionState;
 import org.apache.flink.runtime.instance.ActorGateway;
 import org.apache.flink.runtime.io.network.partition.ResultPartitionID;
@@ -39,6 +41,7 @@ import org.apache.flink.api.common.JobID;
 import org.apache.flink.runtime.jobgraph.JobStatus;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 import org.apache.flink.runtime.jobgraph.ScheduleMode;
+import org.apache.flink.runtime.jobmanager.RecoveryMode;
 import org.apache.flink.runtime.jobmanager.scheduler.Scheduler;
 import org.apache.flink.runtime.messages.ExecutionGraphMessages;
 import org.apache.flink.runtime.taskmanager.TaskExecutionState;
@@ -110,8 +113,6 @@ public class ExecutionGraph implements Serializable {
 	/** The log object used for debugging. */
 	static final Logger LOG = LoggerFactory.getLogger(ExecutionGraph.class);
 	
-	private static final int NUMBER_OF_SUCCESSFUL_CHECKPOINTS_TO_RETAIN = 1;
-
 	// --------------------------------------------------------------------------------------------
 
 	/** The lock used to secure all access to mutable fields, especially the tracking of progress
@@ -180,9 +181,6 @@ public class ExecutionGraph implements Serializable {
 	 * May indicate to deploy all sources, or to deploy everything, or to deploy via backtracking
 	 * from results than need to be materialized. */
 	private ScheduleMode scheduleMode = ScheduleMode.FROM_SOURCES;
-
-	/** Flag that indicate whether the executed dataflow should be periodically snapshotted */
-	private boolean snapshotCheckpointsEnabled;
 
 	/** Flag to indicate whether the Graph has been archived */
 	private boolean isArchived = false;
@@ -340,14 +338,21 @@ public class ExecutionGraph implements Serializable {
 	public boolean isArchived() {
 		return isArchived;
 	}
+	
 	public void enableSnapshotCheckpointing(
 			long interval,
 			long checkpointTimeout,
+			long minPauseBetweenCheckpoints,
+			int maxConcurrentCheckpoints,
 			List<ExecutionJobVertex> verticesToTrigger,
 			List<ExecutionJobVertex> verticesToWaitFor,
 			List<ExecutionJobVertex> verticesToCommitTo,
 			ActorSystem actorSystem,
-			UUID leaderSessionID) {
+			UUID leaderSessionID,
+			CheckpointIDCounter checkpointIDCounter,
+			CompletedCheckpointStore completedCheckpointStore,
+			RecoveryMode recoveryMode) throws Exception {
+
 		// simple sanity checks
 		if (interval < 10 || checkpointTimeout < 10) {
 			throw new IllegalArgumentException();
@@ -363,40 +368,42 @@ public class ExecutionGraph implements Serializable {
 		// disable to make sure existing checkpoint coordinators are cleared
 		disableSnaphotCheckpointing();
 		
-		// create the coordinator that triggers and commits checkpoints and holds the state 
-		snapshotCheckpointsEnabled = true;
+		// create the coordinator that triggers and commits checkpoints and holds the state
 		checkpointCoordinator = new CheckpointCoordinator(
 				jobID,
-				NUMBER_OF_SUCCESSFUL_CHECKPOINTS_TO_RETAIN,
+				interval,
 				checkpointTimeout,
+				minPauseBetweenCheckpoints,
+				maxConcurrentCheckpoints,
 				tasksToTrigger,
 				tasksToWaitFor,
 				tasksToCommitTo,
-				userClassLoader);
+				userClassLoader,
+				checkpointIDCounter,
+				completedCheckpointStore,
+				recoveryMode);
 		
 		// the periodic checkpoint scheduler is activated and deactivated as a result of
 		// job status changes (running -> on, all other states -> off)
 		registerJobStatusListener(
-				checkpointCoordinator.createJobStatusListener(
-						actorSystem,
-						interval,
-						leaderSessionID));
+				checkpointCoordinator.createActivatorDeactivator(actorSystem, leaderSessionID));
 	}
-	
-	public void disableSnaphotCheckpointing() {
+
+	/**
+	 * Disables checkpointing.
+	 *
+	 * <p>The shutdown of the checkpoint coordinator might block. Make sure that calls to this
+	 * method don't block the job manager actor and run asynchronously.
+	 */
+	public void disableSnaphotCheckpointing() throws Exception {
 		if (state != JobStatus.CREATED) {
 			throw new IllegalStateException("Job must be in CREATED state");
 		}
 		
-		snapshotCheckpointsEnabled = false;
 		if (checkpointCoordinator != null) {
 			checkpointCoordinator.shutdown();
 			checkpointCoordinator = null;
 		}
-	}
-	
-	public boolean isSnapshotCheckpointsEnabled() {
-		return snapshotCheckpointsEnabled;
 	}
 
 	public CheckpointCoordinator getCheckpointCoordinator() {
@@ -698,6 +705,26 @@ public class ExecutionGraph implements Serializable {
 					return;
 				}
 			}
+			// Executions are being canceled. Go into cancelling and wait for
+			// all vertices to be in their final state.
+			else if (current == JobStatus.FAILING) {
+				if (transitionState(current, JobStatus.CANCELLING)) {
+					return;
+				}
+			}
+			// All vertices have been cancelled and it's safe to directly go
+			// into the canceled state.
+			else if (current == JobStatus.RESTARTING) {
+				synchronized (progressLock) {
+					if (transitionState(current, JobStatus.CANCELED)) {
+						postRunCleanup();
+						progressLock.notifyAll();
+
+						LOG.info("Canceled during restart.");
+						return;
+					}
+				}
+			}
 			else {
 				// no need to treat other states
 				return;
@@ -733,16 +760,17 @@ public class ExecutionGraph implements Serializable {
 
 	public void restart() {
 		try {
-			if (state == JobStatus.FAILED) {
-				if (!transitionState(JobStatus.FAILED, JobStatus.RESTARTING)) {
-					throw new IllegalStateException("Execution Graph left the state FAILED while trying to restart.");
-				}
-			}
-
 			synchronized (progressLock) {
-				if (state != JobStatus.RESTARTING) {
+				JobStatus current = state;
+
+				if (current == JobStatus.CANCELED) {
+					LOG.info("Canceled job during restart. Aborting restart.");
+					return;
+				}
+				else if (current != JobStatus.RESTARTING) {
 					throw new IllegalStateException("Can only restart job from state restarting.");
 				}
+
 				if (scheduler == null) {
 					throw new IllegalStateException("The execution graph has not been scheduled before - scheduler is null.");
 				}
@@ -769,6 +797,21 @@ public class ExecutionGraph implements Serializable {
 		}
 		catch (Throwable t) {
 			fail(t);
+		}
+	}
+
+	/**
+	 * Restores the latest checkpointed state.
+	 *
+	 * <p>The recovery of checkpoints might block. Make sure that calls to this method don't
+	 * block the job manager actor and run asynchronously.
+	 * 
+	 */
+	public void restoreLatestCheckpointedState() throws Exception {
+		synchronized (progressLock) {
+			if (checkpointCoordinator != null) {
+				checkpointCoordinator.restoreLatestCheckpointedState(getAllVertices(), false, false);
+			}
 		}
 	}
 
@@ -886,7 +929,13 @@ public class ExecutionGraph implements Serializable {
 									}
 								}, executionContext);
 							} else {
-								restart();
+								future(new Callable<Object>() {
+									@Override
+									public Object call() throws Exception {
+										restart();
+										return null;
+									}
+								}, executionContext);
 							}
 							break;
 						}
@@ -906,7 +955,7 @@ public class ExecutionGraph implements Serializable {
 			}
 		}
 	}
-	
+
 	private void postRunCleanup() {
 		try {
 			CheckpointCoordinator coord = this.checkpointCoordinator;

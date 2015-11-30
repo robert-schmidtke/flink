@@ -33,8 +33,8 @@ import org.apache.flink.util.MutableObjectIterator;
  * single input and one or multiple outputs. It is provided with a ReduceFunction
  * implementation.
  * <p>
- * The ReduceTask creates a iterator over all records from its input. The iterator returns all records grouped by their
- * key. The iterator is handed to the <code>reduce()</code> method of the ReduceFunction.
+ * The AllReduceDriver creates an iterator over all records from its input.
+ * The elements are handed pairwise to the <code>reduce()</code> method of the ReduceFunction.
  * 
  * @see org.apache.flink.api.common.functions.ReduceFunction
  */
@@ -108,7 +108,6 @@ public class AllReduceDriver<T> implements Driver<ReduceFunction<T>, T> {
 		final MutableObjectIterator<T> input = this.input;
 		final TypeSerializer<T> serializer = this.serializer;
 
-
 		if (objectReuseEnabled) {
 			T val1 = serializer.createInstance();
 
@@ -123,14 +122,13 @@ public class AllReduceDriver<T> implements Driver<ReduceFunction<T>, T> {
 
 			this.taskContext.getOutputCollector().collect(val1);
 		} else {
-			T val1 = serializer.createInstance();
-
-			if ((val1 = input.next(val1)) == null) {
+			T val1;
+			if ((val1 = input.next()) == null) {
 				return;
 			}
 
 			T val2;
-			while (running && (val2 = input.next(serializer.createInstance())) != null) {
+			while (running && (val2 = input.next()) != null) {
 				val1 = stub.reduce(val1, val2);
 			}
 

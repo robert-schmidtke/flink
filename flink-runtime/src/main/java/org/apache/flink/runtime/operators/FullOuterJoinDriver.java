@@ -18,12 +18,12 @@
 
 package org.apache.flink.runtime.operators;
 
+import org.apache.flink.api.common.operators.base.OuterJoinOperatorBase.OuterJoinType;
 import org.apache.flink.api.common.typeutils.TypeComparator;
 import org.apache.flink.api.common.typeutils.TypePairComparatorFactory;
 import org.apache.flink.api.common.typeutils.TypeSerializer;
 import org.apache.flink.runtime.io.disk.iomanager.IOManager;
 import org.apache.flink.runtime.memory.MemoryManager;
-import org.apache.flink.runtime.operators.sort.AbstractMergeOuterJoinIterator.OuterJoinType;
 import org.apache.flink.runtime.operators.sort.NonReusingMergeOuterJoinIterator;
 import org.apache.flink.runtime.operators.sort.ReusingMergeOuterJoinIterator;
 import org.apache.flink.runtime.operators.util.JoinTaskIterator;
@@ -47,10 +47,11 @@ public class FullOuterJoinDriver<IT1, IT2, OT> extends AbstractOuterJoinDriver<I
 			TypePairComparatorFactory<IT1, IT2> pairComparatorFactory,
 			MemoryManager memoryManager,
 			IOManager ioManager,
-			int numPages
+			double driverMemFraction
 	) throws Exception {
 		switch (driverStrategy) {
 			case FULL_OUTER_MERGE:
+				int numPages = memoryManager.computeNumberOfPages(driverMemFraction);
 				return new ReusingMergeOuterJoinIterator<>(
 						OuterJoinType.FULL,
 						in1,
@@ -82,10 +83,11 @@ public class FullOuterJoinDriver<IT1, IT2, OT> extends AbstractOuterJoinDriver<I
 			TypePairComparatorFactory<IT1, IT2> pairComparatorFactory,
 			MemoryManager memoryManager,
 			IOManager ioManager,
-			int numPages
+			double driverMemFraction
 	) throws Exception {
 		switch (driverStrategy) {
 			case FULL_OUTER_MERGE:
+				int numPages = memoryManager.computeNumberOfPages(driverMemFraction);
 				return new NonReusingMergeOuterJoinIterator<>(
 						OuterJoinType.FULL,
 						in1,

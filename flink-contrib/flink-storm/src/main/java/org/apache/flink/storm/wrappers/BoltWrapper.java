@@ -29,8 +29,6 @@ import org.apache.flink.api.common.ExecutionConfig.GlobalJobParameters;
 import org.apache.flink.api.java.tuple.Tuple0;
 import org.apache.flink.api.java.tuple.Tuple1;
 import org.apache.flink.api.java.tuple.Tuple25;
-import org.apache.flink.configuration.Configuration;
-import org.apache.flink.storm.util.SplitStreamType;
 import org.apache.flink.storm.util.StormConfig;
 import org.apache.flink.streaming.api.operators.AbstractStreamOperator;
 import org.apache.flink.streaming.api.operators.OneInputStreamOperator;
@@ -44,8 +42,8 @@ import com.google.common.collect.Sets;
  * A {@link BoltWrapper} wraps an {@link IRichBolt} in order to execute the Storm bolt within a Flink Streaming
  * program. It takes the Flink input tuples of type {@code IN} and transforms them into {@link StormTuple}s that the
  * bolt can process. Furthermore, it takes the bolt's output tuples and transforms them into Flink tuples of type
- * {@code OUT} (see {@link AbstractStormCollector} for supported types).<br />
- * <br />
+ * {@code OUT} (see {@link AbstractStormCollector} for supported types).<br>
+ * <br>
  * <strong>CAUTION: currently, only simple bolts are supported! (ie, bolts that do not use the Storm configuration
  * <code>Map</code> or <code>TopologyContext</code> that is provided by the bolt's <code>open(..)</code> method.
  * Furthermore, acking and failing of tuples as well as accessing tuple attributes by field names is not supported so
@@ -56,17 +54,20 @@ public class BoltWrapper<IN, OUT> extends AbstractStreamOperator<OUT> implements
 
 	/** The wrapped Storm {@link IRichBolt bolt}. */
 	private final IRichBolt bolt;
+	/** The name of the bolt. */
+	private final String name;
 	/** Number of attributes of the bolt's output tuples per stream. */
 	private final HashMap<String, Integer> numberOfAttributes;
 	/** The schema (ie, ordered field names) of the input stream. */
 	private final Fields inputSchema;
 	/** The original Storm topology. */
 	protected StormTopology stormTopology;
+
 	/**
 	 *  We have to use this because Operators must output
 	 *  {@link org.apache.flink.streaming.runtime.streamrecord.StreamRecord}.
 	 */
-	private TimestampedCollector<OUT> flinkCollector;
+	private transient TimestampedCollector<OUT> flinkCollector;
 
 	/**
 	 * Instantiates a new {@link BoltWrapper} that wraps the given Storm {@link IRichBolt bolt} such that it can be
@@ -190,7 +191,34 @@ public class BoltWrapper<IN, OUT> extends AbstractStreamOperator<OUT> implements
 	 */
 	public BoltWrapper(final IRichBolt bolt, final Fields inputSchema,
 			final Collection<String> rawOutputs) throws IllegalArgumentException {
+		this(bolt, null, inputSchema, rawOutputs);
+	}
+
+	/**
+	 * Instantiates a new {@link BoltWrapper} that wraps the given Storm {@link IRichBolt bolt} such that it can be used
+	 * within a Flink streaming program. The given input schema enable attribute-by-name access for input types
+	 * {@link Tuple0} to {@link Tuple25}. The output type can be any type if parameter {@code rawOutput} is {@code true}
+	 * and the bolt's number of declared output tuples is 1. If {@code rawOutput} is {@code false} the output type will
+	 * be one of {@link Tuple0} to {@link Tuple25} depending on the bolt's declared number of attributes.
+	 * 
+	 * @param bolt
+	 *            The Storm {@link IRichBolt bolt} to be used.
+	 * @param name
+	 *            The name of the bolt.
+	 * @param inputSchema
+	 *            The schema (ie, ordered field names) of the input stream.
+	 * @param rawOutputs
+	 *            Contains stream names if a single attribute output stream, should not be of type {@link Tuple1} but be
+	 *            of a raw type.
+	 * @throws IllegalArgumentException
+	 *             If {@code rawOuput} is {@code true} and the number of declared output attributes is not 1 or if
+	 *             {@code rawOuput} is {@code false} and the number of declared output attributes is not with range
+	 *             [0;25].
+	 */
+	public BoltWrapper(final IRichBolt bolt, final String name, final Fields inputSchema,
+			final Collection<String> rawOutputs) throws IllegalArgumentException {
 		this.bolt = bolt;
+		this.name = name;
 		this.inputSchema = inputSchema;
 		this.numberOfAttributes = WrapperSetupHelper.getNumberOfAttributes(bolt, rawOutputs);
 	}
@@ -206,18 +234,14 @@ public class BoltWrapper<IN, OUT> extends AbstractStreamOperator<OUT> implements
 	}
 
 	@Override
-	public void open(final Configuration parameters) throws Exception {
-		super.open(parameters);
+	public void open() throws Exception {
+		super.open();
 
 		this.flinkCollector = new TimestampedCollector<OUT>(output);
-		OutputCollector stormCollector = null;
+		final OutputCollector stormCollector = new OutputCollector(new BoltCollector<OUT>(
+				this.numberOfAttributes, flinkCollector));
 
-		if (this.numberOfAttributes.size() > 0) {
-			stormCollector = new OutputCollector(new BoltCollector<OUT>(
-					this.numberOfAttributes, flinkCollector));
-		}
-
-		GlobalJobParameters config = super.executionConfig.getGlobalJobParameters();
+		GlobalJobParameters config = getExecutionConfig().getGlobalJobParameters();
 		StormConfig stormConfig = new StormConfig();
 
 		if (config != null) {
@@ -229,7 +253,7 @@ public class BoltWrapper<IN, OUT> extends AbstractStreamOperator<OUT> implements
 		}
 
 		final TopologyContext topologyContext = WrapperSetupHelper.createTopologyContext(
-				super.runtimeContext, this.bolt, this.stormTopology, stormConfig);
+				getRuntimeContext(), this.bolt, this.name, this.stormTopology, stormConfig);
 
 		this.bolt.prepare(stormConfig, topologyContext, stormCollector);
 	}
@@ -239,17 +263,11 @@ public class BoltWrapper<IN, OUT> extends AbstractStreamOperator<OUT> implements
 		this.bolt.cleanup();
 	}
 
-	@SuppressWarnings("unchecked")
 	@Override
 	public void processElement(final StreamRecord<IN> element) throws Exception {
 		this.flinkCollector.setTimestamp(element.getTimestamp());
 		IN value = element.getValue();
-		if (value instanceof SplitStreamType) {
-			this.bolt.execute(new StormTuple<IN>(((SplitStreamType<IN>) value).value,
-					inputSchema));
-		} else {
-			this.bolt.execute(new StormTuple<IN>(value, inputSchema));
-		}
+		this.bolt.execute(new StormTuple<IN>(value, inputSchema));
 	}
 
 	@Override

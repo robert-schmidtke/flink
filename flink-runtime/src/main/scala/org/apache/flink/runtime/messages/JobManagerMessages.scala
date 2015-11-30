@@ -28,6 +28,7 @@ import org.apache.flink.runtime.executiongraph.{ExecutionAttemptID, ExecutionGra
 import org.apache.flink.runtime.instance.{InstanceID, Instance}
 import org.apache.flink.runtime.io.network.partition.ResultPartitionID
 import org.apache.flink.runtime.jobgraph.{IntermediateDataSetID, JobGraph, JobStatus, JobVertexID}
+import org.apache.flink.runtime.jobmanager.SubmittedJobGraph
 import org.apache.flink.runtime.util.SerializedThrowable
 
 import scala.collection.JavaConverters._
@@ -64,6 +65,26 @@ object JobManagerMessages {
       jobGraph: JobGraph,
       listeningBehaviour: ListeningBehaviour)
     extends RequiresLeaderSessionID
+
+  /**
+   * Triggers the recovery of the job with the given ID.
+   *
+   * @param jobId ID of the job to recover
+   */
+  case class RecoverJob(jobId: JobID) extends RequiresLeaderSessionID
+
+  /**
+   * Triggers the submission of the recovered job
+   *
+   * @param submittedJobGraph Contains the submitted JobGraph and the associated JobInfo
+   */
+  case class RecoverSubmittedJob(submittedJobGraph: SubmittedJobGraph)
+    extends RequiresLeaderSessionID
+
+  /**
+   * Triggers recovery of all available jobs.
+   */
+  case object RecoverAllJobs extends RequiresLeaderSessionID
 
   /**
    * Cancels a job with the given [[jobID]] at the JobManager. The result of the cancellation is
@@ -274,6 +295,14 @@ object JobManagerMessages {
    */
   case class JobNotFound(jobID: JobID) extends JobResponse with JobStatusResponse
 
+  /** Triggers the removal of the job with the given job ID
+    *
+    * @param jobID
+    * @param removeJobFromStateBackend true if the job has properly finished
+    */
+  case class RemoveJob(jobID: JobID, removeJobFromStateBackend: Boolean = true)
+    extends RequiresLeaderSessionID
+
   /**
    * Removes the job belonging to the job identifier from the job manager and archives it.
    * @param jobID The job identifier
@@ -302,6 +331,19 @@ object JobManagerMessages {
       taskManagers.asJavaCollection
     }
   }
+
+  /**
+   * Requests the [[Instance]] object of the task manager with the given instance ID
+   *
+   * @param instanceID Instance ID of the task manager
+   */
+  case class RequestTaskManagerInstance(instanceID: InstanceID)
+
+  /**
+   * Returns the [[Instance]] object of the requested task manager. This is in response to
+   * [[RequestTaskManagerInstance]]
+   */
+  case class TaskManagerInstance(instance: Option[Instance])
 
   /**
    * Requests stack trace messages of the task manager
@@ -338,9 +380,23 @@ object JobManagerMessages {
   /** Response containing the ActorRef of the archiver */
   case class ResponseArchive(actor: ActorRef)
 
+  /** Request for the [[org.apache.flink.runtime.webmonitor.WebMonitor]] port. */
+  case object RequestWebMonitorPort
+
+  /**
+   * Response containing the [[org.apache.flink.runtime.webmonitor.WebMonitor]] port.
+   *
+   * -1 indicates that there is no web monitor running.
+   */
+  case class ResponseWebMonitorPort(port: Integer)
+
   // --------------------------------------------------------------------------
   // Utility methods to allow simpler case object access from Java
   // --------------------------------------------------------------------------
+
+  def getRequestJobStatus(jobId : JobID) : AnyRef = {
+    RequestJobStatus(jobId)
+  }
   
   def getRequestNumberRegisteredTaskManager : AnyRef = {
     RequestNumberRegisteredTaskManager
@@ -380,5 +436,13 @@ object JobManagerMessages {
 
   def getRequestArchive: AnyRef = {
     RequestArchive
+  }
+
+  def getRecoverAllJobs: AnyRef = {
+    RecoverAllJobs
+  }
+  
+  def getRequestWebMonitorPort: AnyRef = {
+    RequestWebMonitorPort
   }
 }

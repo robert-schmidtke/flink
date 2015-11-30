@@ -64,7 +64,7 @@ import org.apache.flink.util.NetUtils
 import org.apache.flink.runtime.process.ProcessReaper
 import org.apache.flink.runtime.security.SecurityUtils
 import org.apache.flink.runtime.security.SecurityUtils.FlinkSecuredRunner
-import org.apache.flink.runtime.util.{LeaderRetrievalUtils, MathUtils, EnvironmentInformation}
+import org.apache.flink.runtime.util.{SignalHandler, LeaderRetrievalUtils, MathUtils, EnvironmentInformation}
 
 import scala.concurrent._
 import scala.concurrent.duration._
@@ -1117,7 +1117,12 @@ class TaskManager(
 
     currentJobManager match {
       case Some(jm) =>
-        handleJobManagerDisconnect(jm, s"JobManager ${newJobManagerAkkaURL} was elected as leader.")
+        Option(newJobManagerAkkaURL) match {
+          case Some(newJMAkkaURL) =>
+            handleJobManagerDisconnect(jm, s"JobManager ${newJMAkkaURL} was elected as leader.")
+          case None =>
+            handleJobManagerDisconnect(jm, s"Old JobManager lost its leadership.")
+        }
       case None =>
     }
 
@@ -1199,6 +1204,7 @@ object TaskManager {
     // startup checks and logging
     EnvironmentInformation.logEnvironmentInfo(LOG.logger, "TaskManager", args)
     EnvironmentInformation.checkJavaVersion()
+    SignalHandler.register(LOG.logger)
 
     val maxOpenFileHandles = EnvironmentInformation.getOpenFileHandlesLimit()
     if (maxOpenFileHandles != -1) {
@@ -1758,41 +1764,19 @@ object TaskManager {
     checkConfigParameter(numNetworkBuffers > 0, numNetworkBuffers,
       ConfigConstants.TASK_MANAGER_NETWORK_NUM_BUFFERS_KEY)
     
-    val pageSizeNew: Int = configuration.getInteger(
-      ConfigConstants.TASK_MANAGER_MEMORY_SEGMENT_SIZE_KEY, -1)
-    
-    val pageSizeOld: Int = configuration.getInteger(
-      ConfigConstants.TASK_MANAGER_NETWORK_BUFFER_SIZE_KEY, -1)
+    val pageSize: Int = configuration.getInteger(
+      ConfigConstants.TASK_MANAGER_MEMORY_SEGMENT_SIZE_KEY,
+      ConfigConstants.DEFAULT_TASK_MANAGER_MEMORY_SEGMENT_SIZE)
 
-    val pageSize: Int =
-      if (pageSizeNew != -1) {
-        // new page size has been configured
-        checkConfigParameter(pageSizeNew >= MemoryManager.MIN_PAGE_SIZE, pageSizeNew,
-          ConfigConstants.TASK_MANAGER_MEMORY_SEGMENT_SIZE_KEY,
-          "Minimum memory segment size is " + MemoryManager.MIN_PAGE_SIZE)
+    // check page size of for minimum size
+    checkConfigParameter(pageSize >= MemoryManager.MIN_PAGE_SIZE, pageSize,
+      ConfigConstants.TASK_MANAGER_MEMORY_SEGMENT_SIZE_KEY,
+      "Minimum memory segment size is " + MemoryManager.MIN_PAGE_SIZE)
 
-        checkConfigParameter(MathUtils.isPowerOf2(pageSizeNew), pageSizeNew,
-          ConfigConstants.TASK_MANAGER_MEMORY_SEGMENT_SIZE_KEY,
-          "Memory segment size must be a power of 2.")
-
-        pageSizeNew
-      }
-      else if (pageSizeOld == -1) {
-        // nothing has been configured, take the default
-        ConfigConstants.DEFAULT_TASK_MANAGER_MEMORY_SEGMENT_SIZE
-      }
-      else {
-        // old page size has been configured
-        checkConfigParameter(pageSizeOld >= MemoryManager.MIN_PAGE_SIZE, pageSizeOld,
-          ConfigConstants.TASK_MANAGER_NETWORK_BUFFER_SIZE_KEY,
-          "Minimum buffer size is " + MemoryManager.MIN_PAGE_SIZE)
-
-        checkConfigParameter(MathUtils.isPowerOf2(pageSizeOld), pageSizeOld,
-          ConfigConstants.TASK_MANAGER_NETWORK_BUFFER_SIZE_KEY,
-          "Buffer size must be a power of 2.")
-
-        pageSizeOld
-      }
+    // check page size for power of two
+    checkConfigParameter(MathUtils.isPowerOf2(pageSize), pageSize,
+      ConfigConstants.TASK_MANAGER_MEMORY_SEGMENT_SIZE_KEY,
+      "Memory segment size must be a power of 2.")
     
     // check whether we use heap or off-heap memory
     val memType: MemoryType = 
@@ -1960,7 +1944,7 @@ object TaskManager {
    * directories (not files), and are writable.
    *
    * @param tmpDirs The array of directory paths to check.
-   * @throws Exception Thrown if any of the directories doe not exist or is not writable
+   * @throws Exception Thrown if any of the directories does not exist or is not writable
    *                   or is a file, rather than a directory.
    */
   @throws(classOf[IOException])

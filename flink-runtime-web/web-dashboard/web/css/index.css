@@ -424,6 +424,11 @@ pre.exception {
 .navbar-secondary-additional .navbar-title {
   padding: 12px 20px 13px 20px;
 }
+livechart {
+  width: 30%;
+  height: 30%;
+  text-align: center;
+}
 .canvas-wrapper {
   border: 1px solid #ddd;
   position: relative;
@@ -450,6 +455,12 @@ pre.exception {
 }
 .label-group .label.label-black {
   background-color: #000;
+}
+.navbar-info-button {
+  padding: 3px 4px;
+  font-size: 12px;
+  font-family: inherit;
+  margin-top: -2px;
 }
 svg.graph {
   overflow: hidden;
@@ -576,4 +587,20 @@ svg.graph .node-label {
   .table td.td-long {
     width: 30%;
   }
+}
+.legend-box {
+  font-size: 10px;
+  width: 2em;
+}
+#total-mem {
+  background-color: #7cb5ec;
+}
+#heap-mem {
+  background-color: #434348;
+}
+#non-heap-mem {
+  background-color: #90ed7d;
+}
+.show-pointer {
+  cursor: pointer;
 }

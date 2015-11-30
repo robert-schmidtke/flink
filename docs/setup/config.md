@@ -94,7 +94,7 @@ guide]({{site.baseurl}}/apis/programming_guide.html#parallel-execution) for more
 parallelism.
 
 - `fs.hdfs.hadoopconf`: The absolute path to the Hadoop File System's (HDFS)
-configuration directory (OPTIONAL VALUE).
+configuration **directory** (OPTIONAL VALUE).
 Specifying this value allows programs to reference HDFS files using short URIs
 (`hdfs:///path/to/files`, without including the address and port of the NameNode
 in the file URI). Without this option, HDFS files can be accessed, but require
@@ -142,6 +142,34 @@ results outside of the JVM heap. For setups with larger quantities of memory,
 this can improve the efficiency of the operations performed on the memory
 (DEFAULT: false).
 
+- `taskmanager.memory.segment-size`: The size of memory buffers used by the 
+memory manager and the network stack in bytes (DEFAULT: 32768 (= 32 KiBytes)).
+
+
+### Kerberos
+
+Flink supports Kerberos authentication of Hadoop services such as HDFS, YARN,
+or HBase.
+
+While Hadoop uses Kerberos tickets to authenticate users with services
+initially, the authentication process continues differently afterwards. Instead
+of saving the ticket to authenticate on a later access, Hadoop creates its own
+security tockens (DelegationToken) that it passes around. These are
+authenticated to Kerberos periodically but are independent of the token renewal
+time. The tokens have a maximum life span identical to the Kerberos ticket maximum life
+span.
+
+Please make sure to set the maximum ticket life span high long running
+jobs. The renewal time of the ticket, on the other hand, is not important
+because Hadoop abstracts this away using its own security tocken renewal
+system. Hadoop makes sure that tickets are renewed in time and you can be sure
+to be authenticated until the end of the ticket life time.
+
+If you are on YARN, then it is sufficient to authenticate the client with
+Kerberos. On a Flink standalone cluster you need to ensure that, initially, all
+nodes are authenticated with Kerberos using the `kinit` tool.
+
+
 ### Other
 
 - `taskmanager.tmp.dirs`: The directory for temporary files, or a list of
@@ -182,18 +210,25 @@ the JVMs running Flink's services.
   
   Supported backends: 
   
-   -  `jobmanager` (in-memory)
-   -  `filesystem` (all filesystems supported by Flink, for example HDFS)
+   -  `jobmanager`: In-memory state, backup to JobManager's/ZooKeeper's memory. Should be used only for minimal state (Kafka offsets) or testing and local debugging.
+   -  `filesystem`: State is in-memory on the TaskManagers, and state snapshots are stored in a file system. Supported are all filesystems supported by Flink, for example HDFS, S3, ...
 
 - `state.backend.fs.checkpointdir`: Directory for storing checkpoints in a flink supported filesystem
 Note: State backend must be accessible from the JobManager, use file:// only for local setups. 
 
 - `blob.storage.directory`: Directory for storing blobs (such as user jar's) on the TaskManagers.
 
-- `execution-retries.delay`: Delay between execution retries. Default value "100 s". Note that values
+- `blob.server.port`: Port definition for the blob server (serving user jar's) on the Taskmanagers.
+By default the port is set to 0, which means that the operating system is picking an ephemeral port.
+Flink also accepts a list of ports ("50100,50101"), ranges ("50100-50200") or a combination of both.
+It is recommended to set a range of ports to avoid collisions when multiple TaskManagers are running
+on the same machine.
+
+- `execution-retries.delay`: Delay between execution retries. Default value "5 s". Note that values
 have to be specified as strings with a unit.
 
-- `execution-retries.default`: Default number of execution retries (Can also be set on a per-job basis).
+- `execution-retries.default`: Default number of execution retries, used by jobs that do not explicitly
+specify that value on the execution environment. Default value is zero.
 
 ## Full Reference
 
@@ -254,8 +289,6 @@ network stack. This number determines how many streaming data exchange channels
 a TaskManager can have at the same time and how well buffered the channels are.
 If a job is rejected or you get a warning that the system has not enough buffers
 available, increase this value (DEFAULT: 2048).
-- `taskmanager.network.bufferSizeInBytes`: The size of the network buffers, in
-bytes (DEFAULT: 32768 (= 32 KiBytes)).
 - `taskmanager.memory.size`: The amount of memory (in megabytes) that the task
 manager reserves on the JVM's heap space for sorting, hash tables, and caching
 of intermediate results. If unspecified (-1), the memory manager will take a fixed
@@ -357,7 +390,7 @@ when this fraction of its memory budget is full (DEFAULT: 0.8).
 ## YARN
 
 
-- `yarn.heap-cutoff-ratio`: (Default 0.15) Percentage of heap space to remove from containers started by YARN.
+- `yarn.heap-cutoff-ratio`: (Default 0.25) Percentage of heap space to remove from containers started by YARN.
 When a user requests a certain amount of memory for each TaskManager container (for example 4 GB),
 we can not pass this amount as the maximum heap space for the JVM (`-Xmx` argument) because the JVM
 is also allocating memory outside the heap. YARN is very strict with killing containers which are using
@@ -389,23 +422,23 @@ Flink supports the 'standalone' mode where only a single JobManager runs and no 
 The high availability mode 'zookeeper' supports the execution of multiple JobManagers and JobManager state checkpointing.
 Among the group of JobManagers, ZooKeeper elects one of them as the leader which is responsible for the cluster execution.
 In case of a JobManager failure, a standby JobManager will be elected as the new leader and is given the last checkpointed JobManager state.
-In order to use the 'zookeeper' mode, it is mandatory to also define the `ha.zookeeper.quorum` configuration value.
+In order to use the 'zookeeper' mode, it is mandatory to also define the `recovery.zookeeper.quorum` configuration value.
 
-- `ha.zookeeper.quorum`: Defines the ZooKeeper quorum URL which is used to connet to the ZooKeeper cluster when the 'zookeeper' recovery mode is selected
+- `recovery.zookeeper.quorum`: Defines the ZooKeeper quorum URL which is used to connet to the ZooKeeper cluster when the 'zookeeper' recovery mode is selected
 
-- `ha.zookeeper.dir`: (Default '/flink') Defines the root dir under which the ZooKeeper recovery mode will create znodes. 
+- `recovery.zookeeper.path.root`: (Default '/flink') Defines the root dir under which the ZooKeeper recovery mode will create znodes. 
 
-- `ha.zookeeper.dir.latch`: (Default '/leaderlatch') Defines the znode of the leader latch which is used to elect the leader.
+- `recovery.zookeeper.path.latch`: (Default '/leaderlatch') Defines the znode of the leader latch which is used to elect the leader.
 
-- `ha.zookeeper.dir.leader`: (Default '/leader') Defines the znode of the leader which contains the URL to the leader and the current leader session ID
+- `recovery.zookeeper.path.leader`: (Default '/leader') Defines the znode of the leader which contains the URL to the leader and the current leader session ID
 
-- `ha.zookeeper.client.session-timeout`: (Default '60000') Defines the session timeout for the ZooKeeper session in ms.
+- `recovery.zookeeper.client.session-timeout`: (Default '60000') Defines the session timeout for the ZooKeeper session in ms.
 
-- `ha.zookeeper.client.connection-timeout`: (Default '15000') Defines the connection timeout for ZooKeeper in ms.
+- `recovery.zookeeper.client.connection-timeout`: (Default '15000') Defines the connection timeout for ZooKeeper in ms.
 
-- `ha.zookeeper.client.retry-wait`: (Default '5000') Defines the pause between consecutive retries in ms.
+- `recovery.zookeeper.client.retry-wait`: (Default '5000') Defines the pause between consecutive retries in ms.
 
-- `ha.zookeeper.client.max-retry-attempts`: (Default '3') Defines the number of connection retries before the client gives up.
+- `recovery.zookeeper.client.max-retry-attempts`: (Default '3') Defines the number of connection retries before the client gives up.
 
 ## Background
 
@@ -441,7 +474,7 @@ The number and size of network buffers can be configured with the following
 parameters:
 
 - `taskmanager.network.numberOfBuffers`, and
-- `taskmanager.network.bufferSizeInBytes`.
+- `taskmanager.memory.segment-size`.
 
 ### Configuring Temporary I/O Directories
 

@@ -24,10 +24,10 @@ limitations under the License.
       <th>Start Time</th>
       <th>End Time</th>
       <th>Duration</th>
-      <th>Bytes read</th>
-      <th>Records read</th>
-      <th>Bytes written</th>
-      <th>Records written</th>
+      <th>Bytes received</th>
+      <th>Records received</th>
+      <th>Bytes sent</th>
+      <th>Records sent</th>
       <th>Attempt</th>
       <th>Host</th>
       <th>Status</th>
@@ -37,11 +37,11 @@ limitations under the License.
     <tr ng-repeat="subtask in subtasks">
       <td><span ng-if="subtask['start-time'] &gt; -1">{{ subtask['start-time'] | amDateFormat:'YYYY-MM-DD, H:mm:ss' }}</span></td>
       <td><span ng-if="subtask['end-time'] &gt; -1">{{ subtask['end-time'] | amDateFormat:'YYYY-MM-DD, H:mm:ss' }}</span></td>
-      <td><span ng-if="subtask.duration &gt; -1">{{ subtask.duration }} ms</span></td>
-      <td><span ng-if="subtask.metrics['read-bytes'] &gt; -1">{{ subtask.metrics['read-bytes'] }}</span></td>
-      <td><span ng-if="subtask.metrics['read-records'] &gt; -1">{{ subtask.metrics['read-records'] }}</span></td>
-      <td><span ng-if="subtask.metrics['write-bytes'] &gt; -1">{{ subtask.metrics['write-bytes'] }}</span></td>
-      <td><span ng-if="subtask.metrics['write-records'] &gt; -1">{{ subtask.metrics['write-records'] }}</span></td>
+      <td><span ng-if="subtask.duration &gt; -1" title="{{subtask.duration | humanizeDuration:false}}">{{subtask.duration | humanizeDuration:true}}</span></td>
+      <td><span ng-if="subtask.metrics['read-bytes'] &gt; -1">{{ subtask.metrics['read-bytes'] | number }}</span></td>
+      <td><span ng-if="subtask.metrics['read-records'] &gt; -1">{{ subtask.metrics['read-records'] | number }}</span></td>
+      <td><span ng-if="subtask.metrics['write-bytes'] &gt; -1">{{ subtask.metrics['write-bytes'] | number }}</span></td>
+      <td><span ng-if="subtask.metrics['write-records'] &gt; -1">{{ subtask.metrics['write-records'] | number }}</span></td>
       <td>{{ subtask.attempt + 1 }}</td>
       <td>{{ subtask.host }}</td>
       <td> 

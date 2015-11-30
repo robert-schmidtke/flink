@@ -24,10 +24,10 @@ limitations under the License.
       <th>End Time</th>
       <th>Duration</th>
       <th>Name</th>
-      <th>Bytes read</th>
-      <th>Records read</th>
-      <th>Bytes written</th>
-      <th>Records written</th>
+      <th>Bytes received</th>
+      <th>Records received</th>
+      <th>Bytes sent</th>
+      <th>Records sent</th>
       <th>Tasks</th>
       <th>Status</th>
     </tr>
@@ -36,12 +36,12 @@ limitations under the License.
     <tr ng-if="v.type == 'regular'">
       <td><span ng-if="v['start-time'] &gt; -1">{{ v['start-time'] | amDateFormat:'YYYY-MM-DD, H:mm:ss' }}</span></td>
       <td><span ng-if="v['end-time'] &gt; -1">{{ v['end-time'] | amDateFormat:'YYYY-MM-DD, H:mm:ss' }}</span></td>
-      <td><span ng-if="v.duration &gt; -1">{{ v.duration }} ms</span></td>
+      <td><span ng-if="v.duration &gt; -1" title="{{v.duration | humanizeDuration:false}}">{{v.duration | humanizeDuration:true}}</span></td>
       <td class="td-long">{{ v.name | humanizeText }}</td>
-      <td>{{ v.metrics['read-bytes'] }}</td>
-      <td>{{ v.metrics['read-records'] }}</td>
-      <td>{{ v.metrics['write-bytes'] }}</td>
-      <td>{{ v.metrics['write-records'] }}</td>
+      <td>{{ v.metrics['read-bytes'] | number }}</td>
+      <td>{{ v.metrics['read-records'] | number }}</td>
+      <td>{{ v.metrics['write-bytes'] | number }}</td>
+      <td>{{ v.metrics['write-records'] | number }}</td>
       <td>
         <div class="label-group">
           <bs-label status="{{status}}" ng-repeat="(index, status) in stateList">{{v.tasks[status]}}</bs-label>

@@ -38,7 +38,7 @@ import org.apache.flink.core.memory.MemorySegment;
  * Implementing classes are stateful, because several methods require to set one record as the reference for
  * comparisons and later comparing a candidate against it. Therefore, the classes implementing this interface are
  * not thread safe. The runtime will ensure that no instance is used twice in different threads, but will create
- * a copy for that purpose. It is hence imperative that the copied created by the {@link #duplicate()} method
+ * a copy for that purpose. It is hence imperative that the copies created by the {@link #duplicate()} method
  * share no state with the instance from which they were copied: They have to be deep copies.  
  *
  * @see java.lang.Object#hashCode()
@@ -60,7 +60,7 @@ public abstract class TypeComparator<T> implements Serializable {
 	 * results in a rather uniform value distribution.
 	 * However, any collisions produced by this method cannot be undone. While it is NOT
 	 * important to create hash codes that cover the full spectrum of bits in the integer, it IS important 
-	 * to avoid collisions when combining two value as good as possible.
+	 * to avoid collisions when combining two value as much as possible.
 	 * 
 	 * @param record The record to be hashed.
 	 * @return A hash value for the record.
@@ -76,7 +76,7 @@ public abstract class TypeComparator<T> implements Serializable {
 	 * of the fields from the record, this method may extract those fields.
 	 * <p>
 	 * A typical example for checking the equality of two elements is the following:
-	 * <pre>
+	 * <pre>{@code
 	 * E e1 = ...;
 	 * E e2 = ...;
 	 * 
@@ -84,7 +84,7 @@ public abstract class TypeComparator<T> implements Serializable {
 	 * 
 	 * acc.setReference(e1);
 	 * boolean equal = acc.equalToReference(e2);
-	 * </pre>
+	 * }</pre>
 	 * 
 	 * The rational behind this method is that elements are typically compared using certain features that
 	 * are extracted from them, (such de-serializing as a subset of fields). When setting the
@@ -113,7 +113,7 @@ public abstract class TypeComparator<T> implements Serializable {
 	 * elements {@code e1} and {@code e2} via a comparator, this method can be used the
 	 * following way.
 	 * 
-	 * <pre>
+	 * <pre>{@code
 	 * E e1 = ...;
 	 * E e2 = ...;
 	 * 
@@ -124,7 +124,7 @@ public abstract class TypeComparator<T> implements Serializable {
 	 * acc2.setReference(e2);
 	 * 
 	 * int comp = acc1.compareToReference(acc2);
-	 * </pre>
+	 * }</pre>
 	 * 
 	 * The rational behind this method is that elements are typically compared using certain features that
 	 * are extracted from them, (such de-serializing as a subset of fields). When setting the

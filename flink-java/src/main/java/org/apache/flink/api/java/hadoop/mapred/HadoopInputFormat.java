@@ -30,7 +30,7 @@ import org.apache.hadoop.mapred.JobConf;
 /**
  * Wrapper for using HadoopInputFormats (mapred-variant) with Flink.
  *
- * The IF is returning a Tuple2<K,V>.
+ * The IF is returning a {@code Tuple2<K,V>}.
  *
  * @param <K> Type of the key
  * @param <V> Type of the value.
@@ -41,6 +41,10 @@ public class HadoopInputFormat<K, V> extends HadoopInputFormatBase<K, V, Tuple2<
 
 	public HadoopInputFormat(org.apache.hadoop.mapred.InputFormat<K,V> mapredInputFormat, Class<K> key, Class<V> value, JobConf job) {
 		super(mapredInputFormat, key, value, job);
+	}
+
+	public HadoopInputFormat(org.apache.hadoop.mapred.InputFormat<K,V> mapredInputFormat, Class<K> key, Class<V> value) {
+		super(mapredInputFormat, key, value, new JobConf());
 	}
 	
 	@Override
@@ -59,6 +63,6 @@ public class HadoopInputFormat<K, V> extends HadoopInputFormatBase<K, V, Tuple2<
 	
 	@Override
 	public TypeInformation<Tuple2<K,V>> getProducedType() {
-		return new TupleTypeInfo<Tuple2<K,V>>(TypeExtractor.createTypeInfo(keyClass), TypeExtractor.createTypeInfo(valueClass));
+		return new TupleTypeInfo<>(TypeExtractor.createTypeInfo(keyClass), TypeExtractor.createTypeInfo(valueClass));
 	}
 }

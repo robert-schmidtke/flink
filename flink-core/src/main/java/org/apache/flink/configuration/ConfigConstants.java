@@ -36,12 +36,6 @@ public final class ConfigConstants {
 	public static final String DEFAULT_PARALLELISM_KEY = "parallelism.default";
 
 	/**
-	 * The deprecated config parameter defining the default parallelism for jobs.
-	 */
-	@Deprecated
-	public static final String DEFAULT_PARALLELISM_KEY_OLD = "parallelization.degree.default";
-
-	/**
 	 * Config parameter for the number of re-tries for failed tasks. Setting this
 	 * value to 0 effectively disables fault tolerance.
 	 */
@@ -86,6 +80,14 @@ public final class ConfigConstants {
 	 * The config parameter defining the backlog of BLOB fetches on the JobManager
 	 */
 	public static final String BLOB_FETCH_BACKLOG_KEY = "blob.fetch.backlog";
+
+	/**
+	 * The config parameter defining the server port of the blob service.
+	 * The port can either be a port, such as "9123",
+	 * a range of ports: "50100-50200"
+	 * or a list of ranges and or points: "50100-50200,50300-50400,51234"
+	 */
+	public static final String BLOB_SERVER_PORT = "blob.server.port";
 
 	/**
 	 * The config parameter defining the cleanup interval of the library cache manager.
@@ -134,12 +136,6 @@ public final class ConfigConstants {
 	 * number of possible tasks and shuffles.
 	 */
 	public static final String TASK_MANAGER_NETWORK_NUM_BUFFERS_KEY = "taskmanager.network.numberOfBuffers";
-
-	/**
-	 * Deprecated config parameter defining the size of the buffers used in the network stack.
-	 */
-	@Deprecated
-	public static final String TASK_MANAGER_NETWORK_BUFFER_SIZE_KEY = "taskmanager.network.bufferSizeInBytes";
 
 	/**
 	 * Config parameter defining the size of memory buffers used by the network stack and the memory manager.
@@ -206,20 +202,9 @@ public final class ConfigConstants {
 	public static final String YARN_HEAP_CUTOFF_RATIO = "yarn.heap-cutoff-ratio";
 
 	/**
-	 * Upper bound for heap cutoff on YARN.
-	 * The "yarn.heap-cutoff-ratio" is removing a certain ratio from the heap.
-	 * This value is limiting this cutoff to a absolute value.
-	 *
-	 * THE VALUE IS NO LONGER IN USE.
-	 */
-	@Deprecated
-	public static final String YARN_HEAP_LIMIT_CAP = "yarn.heap-limit-cap";
-
-	/**
 	 * Minimum amount of memory to remove from the heap space as a safety margin.
 	 */
 	public static final String YARN_HEAP_CUTOFF_MIN = "yarn.heap-cutoff-min";
-
 
 	/**
 	 * Reallocate failed YARN containers.
@@ -316,23 +301,18 @@ public final class ConfigConstants {
 	public static final String JOB_MANAGER_WEB_PORT_KEY = "jobmanager.web.port";
 
 	/**
-	 * The option that specifies whether to use the new web frontend
-	 */
-	public static final String JOB_MANAGER_NEW_WEB_FRONTEND_KEY = "jobmanager.new-web-frontend";
-	
-	/**
 	 * The config parameter defining the number of archived jobs for the jobmanager
 	 */
 	public static final String JOB_MANAGER_WEB_ARCHIVE_COUNT = "jobmanager.web.history";
-	
-	public static final String JOB_MANAGER_WEB_LOG_PATH_KEY = "jobmanager.web.logpath";
 
-	/** The directory where the web server's static contents is stored */
-	public static final String JOB_MANAGER_WEB_DOC_ROOT_KEY = "jobmanager.web.docroot";
-	
-	
+	/**
+	 * The log file location (may be in /log for standalone but under log directory when using YARN)
+	 */
+	public static final String JOB_MANAGER_WEB_LOG_PATH_KEY = "jobmanager.web.log.path";
+
+
 	// ------------------------------ Web Client ------------------------------
-	
+
 	/**
 	 * The config parameter defining port for the pact web-frontend server.
 	 */
@@ -438,11 +418,6 @@ public final class ConfigConstants {
 	 */
 	public static final String STATE_BACKEND = "state.backend";
 	
-	/**
-	 * Directory for saving streaming checkpoints
-	 */
-	public static final String STATE_BACKEND_FS_DIR = "state.backend.fs.checkpointdir";
-	
 	// ----------------------------- Miscellaneous ----------------------------
 	
 	/**
@@ -460,22 +435,37 @@ public final class ConfigConstants {
 	// --------------------------- ZooKeeper ----------------------------------
 
 	/** ZooKeeper servers. */
-	public static final String ZOOKEEPER_QUORUM_KEY = "ha.zookeeper.quorum";
+	public static final String ZOOKEEPER_QUORUM_KEY = "recovery.zookeeper.quorum";
+
+	/**
+	 * File system state backend base path for recoverable state handles. Recovery state is written
+	 * to this path and the file state handles are persisted for recovery.
+	 */
+	public static final String ZOOKEEPER_RECOVERY_PATH = "recovery.zookeeper.storageDir";
 
 	/** ZooKeeper root path. */
-	public static final String ZOOKEEPER_DIR_KEY = "ha.zookeeper.dir";
+	public static final String ZOOKEEPER_DIR_KEY = "recovery.zookeeper.path.root";
 
-	public static final String ZOOKEEPER_LATCH_PATH = "ha.zookeeper.dir.latch";
+	public static final String ZOOKEEPER_LATCH_PATH = "recovery.zookeeper.path.latch";
 
-	public static final String ZOOKEEPER_LEADER_PATH = "ha.zookeeper.dir.leader";
+	public static final String ZOOKEEPER_LEADER_PATH = "recovery.zookeeper.path.leader";
 
-	public static final String ZOOKEEPER_SESSION_TIMEOUT = "ha.zookeeper.client.session-timeout";
+	/** ZooKeeper root path (ZNode) for job graphs. */
+	public static final String ZOOKEEPER_JOBGRAPHS_PATH = "recovery.zookeeper.path.jobgraphs";
 
-	public static final String ZOOKEEPER_CONNECTION_TIMEOUT = "ha.zookeeper.client.connection-timeout";
+	/** ZooKeeper root path (ZNode) for completed checkpoints. */
+	public static final String ZOOKEEPER_CHECKPOINTS_PATH = "recovery.zookeeper.path.checkpoints";
 
-	public static final String ZOOKEEPER_RETRY_WAIT = "ha.zookeeper.client.retry-wait";
+	/** ZooKeeper root path (ZNode) for checkpoint counters. */
+	public static final String ZOOKEEPER_CHECKPOINT_COUNTER_PATH = "recovery.zookeeper.path.checkpoint-counter";
 
-	public static final String ZOOKEEPER_MAX_RETRY_ATTEMPTS = "ha.zookeeper.client.max-retry-attempts";
+	public static final String ZOOKEEPER_SESSION_TIMEOUT = "recovery.zookeeper.client.session-timeout";
+
+	public static final String ZOOKEEPER_CONNECTION_TIMEOUT = "recovery.zookeeper.client.connection-timeout";
+
+	public static final String ZOOKEEPER_RETRY_WAIT = "recovery.zookeeper.client.retry-wait";
+
+	public static final String ZOOKEEPER_MAX_RETRY_ATTEMPTS = "recovery.zookeeper.client.max-retry-attempts";
 
 	// ------------------------------------------------------------------------
 	//                            Default Values
@@ -521,6 +511,11 @@ public final class ConfigConstants {
 	public static final int DEFAULT_BLOB_FETCH_BACKLOG = 1000;
 
 	/**
+	 * Default BLOB server port. 0 means ephemeral port.
+	 */
+	public static final String DEFAULT_BLOB_SERVER_PORT = "0";
+
+	/**
 	 * The default network port the task manager expects incoming IPC connections. The {@code 0} means that
 	 * the TaskManager searches for a free port.
 	 */
@@ -546,12 +541,6 @@ public final class ConfigConstants {
 	 * Default number of buffers used in the network stack.
 	 */
 	public static final int DEFAULT_TASK_MANAGER_NETWORK_NUM_BUFFERS = 2048;
-
-	/**
-	 * Default size of network stack buffers.
-	 */
-	@Deprecated
-	public static final int DEFAULT_TASK_MANAGER_NETWORK_BUFFER_SIZE = 32768;
 
 	/**
 	 * Default size of memory segments in the network stack and the memory manager.
@@ -624,7 +613,7 @@ public final class ConfigConstants {
 	public static final boolean DEFAULT_FILESYSTEM_OVERWRITE = false;
 
 	/**
-	 * The default behavior for output directory creating (create only directory when parallelism > 1).
+	 * The default behavior for output directory creating (create only directory when parallelism &gt; 1).
 	 */
 	public static final boolean DEFAULT_FILESYSTEM_ALWAYS_CREATE_DIRECTORY = false;
 	
@@ -740,6 +729,12 @@ public final class ConfigConstants {
 	public static final String DEFAULT_ZOOKEEPER_LATCH_PATH = "/leaderlatch";
 
 	public static final String DEFAULT_ZOOKEEPER_LEADER_PATH = "/leader";
+
+	public static final String DEFAULT_ZOOKEEPER_JOBGRAPHS_PATH = "/jobgraphs";
+
+	public static final String DEFAULT_ZOOKEEPER_CHECKPOINTS_PATH = "/checkpoints";
+
+	public static final String DEFAULT_ZOOKEEPER_CHECKPOINT_COUNTER_PATH = "/checkpoint-counter";
 
 	public static final int DEFAULT_ZOOKEEPER_SESSION_TIMEOUT = 60000;
 

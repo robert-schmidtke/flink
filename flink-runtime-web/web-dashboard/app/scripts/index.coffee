@@ -66,7 +66,7 @@ angular.module('flinkApp', ['ui.router', 'angularMoment'])
       main:
         templateUrl: "partials/jobs/running-jobs.html"
         controller: 'RunningJobsController'
-  
+
   .state "completed-jobs",
     url: "/completed-jobs"
     views:
@@ -95,14 +95,14 @@ angular.module('flinkApp', ['ui.router', 'angularMoment'])
     views:
       'node-details':
         templateUrl: "partials/jobs/job.plan.node-list.overview.html"
-        controller: 'JobPlanOverviewController' 
+        controller: 'JobPlanOverviewController'
 
   .state "single-job.plan.accumulators",
     url: "/accumulators"
     views:
       'node-details':
         templateUrl: "partials/jobs/job.plan.node-list.accumulators.html"
-        controller: 'JobPlanAccumulatorsController' 
+        controller: 'JobPlanAccumulatorsController'
 
   .state "single-job.timeline",
     url: "/timeline"
@@ -116,12 +116,6 @@ angular.module('flinkApp', ['ui.router', 'angularMoment'])
       vertex:
         templateUrl: "partials/jobs/job.timeline.vertex.html"
         controller: 'JobTimelineVertexController'
-
-  .state "single-job.statistics",
-    url: "/statistics"
-    views:
-      details:
-        templateUrl: "partials/jobs/job.statistics.html"
 
   .state "single-job.exceptions",
     url: "/exceptions"
@@ -143,12 +137,25 @@ angular.module('flinkApp', ['ui.router', 'angularMoment'])
       details:
         templateUrl: "partials/jobs/job.config.html"
 
-  .state "taskmanagers",
+  .state "all-manager",
     url: "/taskmanagers"
     views:
       main:
-        templateUrl: "partials/taskmanagers/index.html"
-        controller: 'TaskManagersController'
+        templateUrl: "partials/taskmanager/index.html"
+        controller: 'AllTaskManagersController'
+
+  .state "single-manager",
+      url: "/taskmanager/{taskmanagerid}"
+      views:
+        main:
+          templateUrl: "partials/taskmanager/taskmanager.html"
+          controller: 'SingleTaskManagerController'
+
+  .state "single-manager.metrics",
+    url: "/metrics"
+    views:
+      details:
+        templateUrl: "partials/taskmanager/taskmanager.metrics.html"
 
   .state "jobmanager",
       url: "/jobmanager"
@@ -168,11 +175,13 @@ angular.module('flinkApp', ['ui.router', 'angularMoment'])
     views:
       details:
         templateUrl: "partials/jobmanager/stdout.html"
+        controller: 'JobManagerStdoutController'
 
-  .state "jobmanager.logfile",
-    url: "/logfile"
+  .state "jobmanager.log",
+    url: "/log"
     views:
       details:
-        templateUrl: "partials/jobmanager/logfile.html"
+        templateUrl: "partials/jobmanager/log.html"
+        controller: 'JobManagerLogsController'
 
   $urlRouterProvider.otherwise "/overview"

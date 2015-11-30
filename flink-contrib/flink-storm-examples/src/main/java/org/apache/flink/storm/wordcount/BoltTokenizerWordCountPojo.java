@@ -20,6 +20,7 @@ package org.apache.flink.storm.wordcount;
 import backtype.storm.topology.IRichBolt;
 
 import org.apache.flink.api.java.io.CsvInputFormat;
+import org.apache.flink.api.java.io.PojoCsvInputFormat;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.api.java.typeutils.PojoTypeInfo;
 import org.apache.flink.api.java.typeutils.TypeExtractor;
@@ -36,15 +37,12 @@ import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
  * Implements the "WordCount" program that computes a simple word occurrence histogram over text files in a streaming
  * fashion. The tokenizer step is performed by a {@link IRichBolt Bolt}. In contrast to {@link BoltTokenizerWordCount}
  * the tokenizer's input is a POJO type and the single field is accessed by name.
- * <p/>
- * <p/>
+ * <p>
  * The input is a plain text file with lines separated by newline characters.
- * <p/>
- * <p/>
+ * <p>
  * Usage: <code>WordCount &lt;text path&gt; &lt;result path&gt;</code><br>
  * If no parameters are provided, the program is run with default data from {@link WordCountData}.
- * <p/>
- * <p/>
+ * <p>
  * This example shows how to:
  * <ul>
  * <li>how to access attributes by name within a Bolt for POJO type input streams
@@ -122,7 +120,7 @@ public class BoltTokenizerWordCountPojo {
 			// read the text file from given input path
 			PojoTypeInfo<Sentence> sourceType = (PojoTypeInfo<Sentence>) TypeExtractor
 					.getForObject(new Sentence(""));
-			return env.createInput(new CsvInputFormat<Sentence>(new Path(
+			return env.createInput(new PojoCsvInputFormat<Sentence>(new Path(
 					textPath), CsvInputFormat.DEFAULT_LINE_DELIMITER,
 					CsvInputFormat.DEFAULT_LINE_DELIMITER, sourceType),
 					sourceType);

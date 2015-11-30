@@ -120,17 +120,17 @@ manually create the project, you can use the archetype and create a project by c
 <div class="codetabs" markdown="1">
 <div data-lang="java" markdown="1">
 {% highlight bash %}
-mvn archetype:generate /
-    -DarchetypeGroupId=org.apache.flink/
-    -DarchetypeArtifactId=flink-quickstart-java /
+mvn archetype:generate \
+    -DarchetypeGroupId=org.apache.flink \
+    -DarchetypeArtifactId=flink-quickstart-java \
     -DarchetypeVersion={{site.version }}
 {% endhighlight %}
 </div>
 <div data-lang="scala" markdown="1">
 {% highlight bash %}
-mvn archetype:generate /
-    -DarchetypeGroupId=org.apache.flink/
-    -DarchetypeArtifactId=flink-quickstart-scala /
+mvn archetype:generate \
+    -DarchetypeGroupId=org.apache.flink \
+    -DarchetypeArtifactId=flink-quickstart-scala \
     -DarchetypeVersion={{site.version }}
 {% endhighlight %}
 </div>
@@ -197,7 +197,7 @@ to run your program on Flink with Scala 2.11, you need to add a `_2.11` suffix t
 values of the Flink modules in your dependencies section.
 
 If you are looking for building Flink with Scala 2.11, please check
-[build guide](../setup/building.html#build-flink-for-scala-211).
+[build guide](../setup/building.html#build-flink-for-a-specific-scala-version).
 
 #### Hadoop Dependency Versions
 
@@ -630,8 +630,8 @@ DataSet<Tuple3<Integer, String, Double>> output = input.sum(0).andMin(2);
       <td>
         Joins two data sets by creating all pairs of elements that are equal on their keys.
         Optionally uses a JoinFunction to turn the pair of elements into a single element, or a
-        FlatJoinFunction to turn the pair of elements into arbitararily many (including none)
-        elements. See <a href="#specifying-keys">keys</a> on how to define join keys.
+        FlatJoinFunction to turn the pair of elements into arbitrarily many (including none)
+        elements. See the <a href="#specifying-keys">keys section</a> to learn how to define join keys.
 {% highlight java %}
 result = input1.join(input2)
                .where(0)       // key of the first input (tuple field 0)
@@ -650,7 +650,27 @@ result = input1.join(input2)
 result = input1.join(input2, JoinHint.BROADCAST_HASH_FIRST)
                .where(0).equalTo(1);
 {% endhighlight %}
-        Note that the join transformation works only for equi-joins. Other join types, for example outer-joins need to be expressed using CoGroup.
+        Note that the join transformation works only for equi-joins. Other join types need to be expressed using OuterJoin or CoGroup.
+      </td>
+    </tr>
+
+    <tr>
+      <td><strong>OuterJoin</strong></td>
+      <td>
+        Performs a left, right, or full outer join on two data sets. Outer joins are similar to regular (inner) joins and create all pairs of elements that are equal on their keys. In addition, records of the "outer" side (left, right, or both in case of full) are preserved if no matching key is found in the other side. Matching pairs of elements (or one element and a `null` value for the other input) are given to a JoinFunction to turn the pair of elements into a single element, or to a FlatJoinFunction to turn the pair of elements into arbitrarily many (including none)         elements. See the <a href="#specifying-keys">keys section</a> to learn how to define join keys.
+{% highlight java %}
+input1.leftOuterJoin(input2) // rightOuterJoin or fullOuterJoin for right or full outer joins
+      .where(0)              // key of the first input (tuple field 0)
+      .equalTo(1)            // key of the second input (tuple field 1)
+      .with(new JoinFunction<String, String, String>() {
+          public String join(String v1, String v2) {
+             // NOTE: 
+             // - v2 might be null for leftOuterJoin
+             // - v1 might be null for rightOuterJoin
+             // - v1 OR v2 might be null for fullOuterJoin
+          }
+      });
+{% endhighlight %}
       </td>
     </tr>
 
@@ -659,7 +679,7 @@ result = input1.join(input2, JoinHint.BROADCAST_HASH_FIRST)
       <td>
         <p>The two-dimensional variant of the reduce operation. Groups each input on one or more
         fields and then joins the groups. The transformation function is called per pair of groups.
-        See <a href="#specifying-keys">keys</a> on how to define coGroup keys.</p>
+        See the <a href="#specifying-keys">keys section</a> to learn how to define coGroup keys.</p>
 {% highlight java %}
 data1.coGroup(data2)
      .where(0)
@@ -906,8 +926,8 @@ val output: DataSet[(Int, String, Doublr)] = input.sum(0).min(2)
       <td>
         Joins two data sets by creating all pairs of elements that are equal on their keys.
         Optionally uses a JoinFunction to turn the pair of elements into a single element, or a
-        FlatJoinFunction to turn the pair of elements into arbitararily many (including none)
-        elements. See <a href="#specifying-keys">keys</a> on how to define join keys.
+        FlatJoinFunction to turn the pair of elements into arbitrarily many (including none)
+        elements. See the <a href="#specifying-keys">keys section</a> to learn how to define join keys.
 {% highlight scala %}
 // In this case tuple fields are used as keys. "0" is the join field on the first tuple
 // "1" is the join field on the second tuple.
@@ -926,7 +946,21 @@ val result = input1.join(input2).where(0).equalTo(1)
 val result = input1.join(input2, JoinHint.BROADCAST_HASH_FIRST)
                    .where(0).equalTo(1)
 {% endhighlight %}
-          Note that the join transformation works only for equi-joins. Other join types, for example outer-joins need to be expressed using CoGroup.
+          Note that the join transformation works only for equi-joins. Other join types need to be expressed using OuterJoin or CoGroup.
+      </td>
+    </tr>
+
+    <tr>
+      <td><strong>OuterJoin</strong></td>
+      <td>
+        Performs a left, right, or full outer join on two data sets. Outer joins are similar to regular (inner) joins and create all pairs of elements that are equal on their keys. In addition, records of the "outer" side (left, right, or both in case of full) are preserved if no matching key is found in the other side. Matching pairs of elements (or one element and a `null` value for the other input) are given to a JoinFunction to turn the pair of elements into a single element, or to a FlatJoinFunction to turn the pair of elements into arbitrarily many (including none)         elements. See the <a href="#specifying-keys">keys section</a> to learn how to define join keys.
+{% highlight scala %}
+val joined = left.leftOuterJoin(right).where(0).equalTo(1) {
+   (left, right) =>
+     val a = if (left == null) "none" else left._1
+     (a, right)
+  }
+{% endhighlight %}
       </td>
     </tr>
 
@@ -935,7 +969,7 @@ val result = input1.join(input2, JoinHint.BROADCAST_HASH_FIRST)
       <td>
         <p>The two-dimensional variant of the reduce operation. Groups each input on one or more
         fields and then joins the groups. The transformation function is called per pair of groups.
-        See <a href="#specifying-keys">keys</a> on how to define coGroup keys.</p>
+        See the <a href="#specifying-keys">keys section</a> to learn how to define coGroup keys.</p>
 {% highlight scala %}
 data1.coGroup(data2).where(0).equalTo(1)
 {% endhighlight %}
@@ -1459,6 +1493,7 @@ There are six different categories of data types:
 4. **Regular Classes**
 5. **Values**
 6. **Hadoop Writables**
+7. **Special Types**
 
 #### Tuples and Case Classes
 
@@ -1540,9 +1575,9 @@ public class WordWithCount {
     public String word;
     public int count;
 
-    public WordCount() {}
+    public WordWithCount() {}
 
-    public WordCount(String word, int count) {
+    public WordWithCount(String word, int count) {
         this.word = word;
         this.count = count;
     }
@@ -1617,6 +1652,12 @@ be altered, allowing programmers to reuse objects and take pressure off the garb
 You can use types that implement the `org.apache.hadoop.Writable` interface. The serialization logic
 defined in the `write()`and `readFields()` methods will be used for serialization.
 
+#### Special Types
+
+You can use special types, including Scala's `Either`, `Option`, and `Try`.
+The Java API has its own custom implementation of `Either`.
+Similarly to Scala's `Either`, it represents a value of one two possible types, *Left* or *Right*.
+`Either` can be useful for error handling or operators that need to output two different types of records.
 
 #### Type Erasure & Type Inference
 
@@ -1687,7 +1728,18 @@ File-based:
   Returns a DataSet of tuples or POJOs. Supports the basic java types and their Value counterparts as field
   types.
 
-- `readFileOfPrimitives(path, Class)` / `PrimitiveInputFormat` - Parses files of new-line (or another char sequence) delimited primitive data types such as `String` or `Integer`. 
+- `readFileOfPrimitives(path, Class)` / `PrimitiveInputFormat` - Parses files of new-line (or another char sequence)
+  delimited primitive data types such as `String` or `Integer`.
+   
+- `readFileOfPrimitives(path, delimiter, Class)` / `PrimitiveInputFormat` - Parses files of new-line (or another char sequence)
+   delimited primitive data types such as `String` or `Integer` using the given delimiter.
+   
+- `readHadoopFile(FileInputFormat, Key, Value, path)` / `FileInputFormat` - Creates a JobConf and reads file from the specified 
+   path with the specified FileInputFormat, Key class and Value class and returns them as Tuple2<Key, Value>.
+   
+- `readSequenceFile(Key, Value, path)` / `SequenceFileInputFormat` - Creates a JobConf and reads file from the specified path with
+   type SequenceFileInputFormat, Key class and Value class and returns them as Tuple2<Key, Value>.
+ 
 
 Collection-based:
 
@@ -1703,7 +1755,7 @@ Collection-based:
 - `fromParallelCollection(SplittableIterator, Class)` - Creates a data set from an iterator, in
   parallel. The class specifies the data type of the elements returned by the iterator.
 
-- `generateSequence(from, to)` - Generates the squence of numbers in the given interval, in
+- `generateSequence(from, to)` - Generates the sequence of numbers in the given interval, in
   parallel.
 
 Generic:
@@ -1734,9 +1786,18 @@ DataSet<Tuple2<String, Double>> csvInput = env.readCsvFile("hdfs:///the/CSV/file
 
 // read a CSV file with three fields into a POJO (Person.class) with corresponding fields
 DataSet<Person>> csvInput = env.readCsvFile("hdfs:///the/CSV/file")
-                         .pojoType(Person.class, "name", "age", "zipcode");                         
+                         .pojoType(Person.class, "name", "age", "zipcode");  
+                                                 
 
-// create a set from some given elements
+// read a file from the specified path of type TextInputFormat 
+DataSet<Tuple2<LongWritable, Text>> tuples =
+ env.readHadoopFile(new TextInputFormat(), LongWritable.class, Text.class, "hdfs://nnHost:nnPort/path/to/file");
+                         
+// read a file from the specified path of type SequenceFileInputFormat
+DataSet<Tuple2<IntWritable, Text>> tuples =
+ env.readSequenceFile(IntWritable.class, Text.class, "hdfs://nnHost:nnPort/path/to/file");
+
+// creates a set from some given elements
 DataSet<String> value = env.fromElements("Foo", "bar", "foobar", "fubar");
 
 // generate a number sequence
@@ -1822,6 +1883,15 @@ File-based:
   Returns a DataSet of tuples, case class objects, or POJOs. Supports the basic java types and their Value counterparts as field
   types.
 
+- `readFileOfPrimitives(path, delimiter)` / `PrimitiveInputFormat` - Parses files of new-line (or another char sequence)
+  delimited primitive data types such as `String` or `Integer` using the given delimiter.
+  
+- `readHadoopFile(FileInputFormat, Key, Value, path)` / `FileInputFormat` - Creates a JobConf and reads file from the specified 
+   path with the specified FileInputFormat, Key class and Value class and returns them as Tuple2<Key, Value>.
+   
+- `readSequenceFile(Key, Value, path)` / `SequenceFileInputFormat` - Creates a JobConf and reads file from the specified path with
+   type SequenceFileInputFormat, Key class and Value class and returns them as Tuple2<Key, Value>.  
+
 Collection-based:
 
 - `fromCollection(Seq)` - Creates a data set from a Seq. All elements
@@ -1880,8 +1950,16 @@ val values = env.fromElements("Foo", "bar", "foobar", "fubar")
 
 // generate a number sequence
 val numbers = env.generateSequence(1, 10000000);
-{% endhighlight %}
 
+// read a file from the specified path of type TextInputFormat 
+val tuples = env.readHadoopFile(new TextInputFormat, classOf[LongWritable],
+ classOf[Text], "hdfs://nnHost:nnPort/path/to/file")
+                         
+// read a file from the specified path of type SequenceFileInputFormat
+val tuples = env.readSequenceFile(classOf[IntWritable], classOf[Text],
+ "hdfs://nnHost:nnPort/path/to/file")
+
+{% endhighlight %}
 
 #### Configuring CSV Parsing
 
@@ -3001,9 +3079,7 @@ attribute. Both the command line and the web interface support a parameter to pa
 class name manually for cases where the JAR manifest contains neither attribute.
 
 2. If the entry point class implements the `org.apache.flinkapi.common.Program`, then the system
-calls the `getPlan(String...)` method to obtain the program plan to execute. The
-`getPlan(String...)` method was the only possible way of defining a program in the *Record API*
-(see [0.4 docs](http://stratosphere.eu/docs/0.4/)) and is also supported in the new Java API.
+calls the `getPlan(String...)` method to obtain the program plan to execute.
 
 3. If the entry point class does not implement the `org.apache.flinkapi.common.Program` interface,
 the system will invoke the main method of the class.

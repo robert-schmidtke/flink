@@ -30,6 +30,7 @@ under the License.
 
 	<properties>
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+		<flink.version>1.0-SNAPSHOT</flink.version>
 	</properties>
 
 	<repositories>
@@ -74,17 +75,17 @@ under the License.
 		<dependency>
 			<groupId>org.apache.flink</groupId>
 			<artifactId>flink-java</artifactId>
-			<version>0.10-SNAPSHOT</version>
+			<version>${flink.version}</version>
 		</dependency>
 		<dependency>
 			<groupId>org.apache.flink</groupId>
-			<artifactId>flink-streaming-core</artifactId>
-			<version>0.10-SNAPSHOT</version>
+			<artifactId>flink-streaming-java</artifactId>
+			<version>${flink.version}</version>
 		</dependency>
 		<dependency>
 			<groupId>org.apache.flink</groupId>
 			<artifactId>flink-clients</artifactId>
-			<version>0.10-SNAPSHOT</version>
+			<version>${flink.version}</version>
 		</dependency>
 	</dependencies>
 
@@ -117,12 +118,11 @@ under the License.
 									<exclude>org.apache.flink:flink-runtime</exclude>
 									<exclude>org.apache.flink:flink-optimizer</exclude>
 									<exclude>org.apache.flink:flink-clients</exclude>
-									<exclude>org.apache.flink:flink-spargel</exclude>
 									<exclude>org.apache.flink:flink-avro</exclude>
 									<exclude>org.apache.flink:flink-java-examples</exclude>
 									<exclude>org.apache.flink:flink-scala-examples</exclude>
 									<exclude>org.apache.flink:flink-streaming-examples</exclude>
-									<exclude>org.apache.flink:flink-streaming-core</exclude>
+									<exclude>org.apache.flink:flink-streaming-java</exclude>
 
 									<!-- Also exclude very big transitive dependencies of Flink
 
@@ -323,19 +323,19 @@ under the License.
 				<dependency>
 					<groupId>org.apache.flink</groupId>
 					<artifactId>flink-java</artifactId>
-					<version>0.10-SNAPSHOT</version>
+					<version>${flink.version}</version>
 					<scope>provided</scope>
 				</dependency>
 				<dependency>
 					<groupId>org.apache.flink</groupId>
-					<artifactId>flink-streaming-core</artifactId>
-					<version>0.10-SNAPSHOT</version>
+					<artifactId>flink-streaming-java</artifactId>
+					<version>${flink.version}</version>
 					<scope>provided</scope>
 				</dependency>
 				<dependency>
 					<groupId>org.apache.flink</groupId>
 					<artifactId>flink-clients</artifactId>
-					<version>0.10-SNAPSHOT</version>
+					<version>${flink.version}</version>
 					<scope>provided</scope>
 				</dependency>
 			</dependencies>

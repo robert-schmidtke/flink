@@ -304,7 +304,7 @@ class TupleGenerator {
 			// create and return new project operator
 			sb.append("\t\t\treturn new ProjectOperator<T, Tuple"+numFields+"<");
 			appendTupleTypeGenerics(sb, numFields);
-			sb.append(">>(this.ds, this.fieldIndexes, tType, this);\n");
+			sb.append(">>(this.ds, this.fieldIndexes, tType);\n");
 
 			// method end
 			sb.append("\t\t}\n");
@@ -469,19 +469,12 @@ class TupleGenerator {
 			// create csv input format
 			sb.append("\t\tCsvInputFormat<Tuple" + numFields + "<");
 			appendTupleTypeGenerics(sb, numFields);
-			sb.append(">> inputFormat = new CsvInputFormat<Tuple" + numFields + "<");
+			sb.append(">> inputFormat = new TupleCsvInputFormat<Tuple" + numFields + "<");
 			appendTupleTypeGenerics(sb, numFields);
-			sb.append(">>(path, types);\n");
+			sb.append(">>(path, types, this.includedMask);\n");
 
 			// configure input format
-			sb.append("\t\tconfigureInputFormat(inputFormat, ");
-			for (int i = 0; i < numFields; i++) {
-				if (i > 0) {
-					sb.append(", ");
-				}
-				sb.append("type" + i);
-			}
-			sb.append(");\n");
+			sb.append("\t\tconfigureInputFormat(inputFormat);\n");
 
 			// return
 			sb.append("\t\treturn new DataSource<Tuple" + numFields + "<");
@@ -727,6 +720,8 @@ class TupleGenerator {
 		w.println("\t* Shallow tuple copy.");
 		w.println("\t* @return A new Tuple with the same fields as this.");
 		w.println("\t*/");
+		w.println("\t@Override");
+		w.println("\t@SuppressWarnings(\"unchecked\")");
 		w.println("\tpublic " + className + tupleTypes + " copy(){ ");
 
 		w.print("\t\treturn new " + className + tupleTypes + "(this.f0");

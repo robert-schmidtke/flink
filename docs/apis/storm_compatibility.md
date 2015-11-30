@@ -209,7 +209,6 @@ If a whole topology is executed in Flink using `FlinkTopologyBuilder` etc., ther
 For embedded usage, the output stream will be of data type `SplitStreamType<T>` and must be split by using `DataStream.split(...)` and `SplitStream.select(...)`.
 Flink provides the predefined output selector `StormStreamSelector<T>` for `.split(...)` already.
 Furthermore, the wrapper type `SplitStreamTuple<T>` can be removed using `SplitStreamMapper<T>`.
-If a data stream of type `SplitStreamTuple<T>` is used as input for a Bolt, it is **not** required to strip the wrapper &ndash; `BoltWrapper` removes it automatically.
 
 <div class="codetabs" markdown="1">
 <div data-lang="java" markdown="1">
@@ -221,10 +220,9 @@ DataStream<SplitStreamType<SomeType>> multiStream = ...
 
 SplitStream<SplitStreamType<SomeType>> splitStream = multiStream.split(new StormStreamSelector<SomeType>());
 
-// remove SplitStreamMapper to get data stream of type SomeType
-DataStream<SomeType> s1 = splitStream.select("s1").map(new SplitStreamMapper<SomeType>).returns(SomeType.classs);
-// apply Bolt directly, without stripping SplitStreamType
-DataStream<BoltOutputType> s2 = splitStream.select("s2").transform(/* use Bolt for further processing */);
+// remove SplitStreamType using SplitStreamMapper to get data stream of type SomeType
+DataStream<SomeType> s1 = splitStream.select("s1").map(new SplitStreamMapper<SomeType>()).returns(SomeType.classs);
+DataStream<SomeType> s2 = splitStream.select("s2").map(new SplitStreamMapper<SomeType>()).returns(SomeType.classs);
 
 // do further processing on s1 and s2
 [...]
@@ -273,7 +271,7 @@ public class TimedFiniteSpout extends BaseRichSpout implements FiniteSpout {
 You can find more examples in Maven module `flink-storm-examples`.
 For the different versions of WordCount, see [README.md](https://github.com/apache/flink/tree/master/flink-contrib/flink-storm-examples/README.md).
 To run the examples, you need to assemble a correct jar file.
-`flink-storm-examples-0.10-SNAPSHOT.jar` is **no** valid jar file for job execution (it is only a standard maven artifact).
+`flink-storm-examples-{{ site.version }}.jar` is **no** valid jar file for job execution (it is only a standard maven artifact).
 
 There are example jars for embedded Spout and Bolt, namely `WordCount-SpoutSource.jar` and `WordCount-BoltTokenizer.jar`, respectively.
 Compare `pom.xml` to see how both jars are built.

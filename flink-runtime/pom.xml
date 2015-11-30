@@ -25,7 +25,7 @@ under the License.
 	<parent>
 		<groupId>org.apache.flink</groupId>
 		<artifactId>flink-parent</artifactId>
-		<version>0.10-SNAPSHOT</version>
+		<version>1.0-SNAPSHOT</version>
 		<relativePath>..</relativePath>
 	</parent>
 
@@ -74,29 +74,11 @@ under the License.
 			<groupId>commons-io</groupId>
 			<artifactId>commons-io</artifactId>
 		</dependency>
-		
-		<dependency>
-			<groupId>org.eclipse.jetty</groupId>
-			<artifactId>jetty-server</artifactId>
-			<!-- version is derived from base module -->
-		</dependency>
 
 		<dependency>
-			<groupId>org.eclipse.jetty</groupId>
-			<artifactId>jetty-servlet</artifactId>
-			<!-- version is derived from base module -->
-		</dependency>
-
-		<dependency>
-			<groupId>com.amazonaws</groupId>
-			<artifactId>aws-java-sdk</artifactId>
-			<version>1.8.1</version>
-			<exclusions>
-				<exclusion>
-					<artifactId>commons-codec</artifactId>
-					<groupId>commons-codec</groupId>
-				</exclusion>
-			</exclusions>
+			<groupId>org.apache.httpcomponents</groupId>
+			<artifactId>httpclient</artifactId>
+			<!-- Version is set in root POM -->
 		</dependency>
 
 		<dependency>
@@ -200,7 +182,7 @@ under the License.
 
 		<dependency>
 			<groupId>org.apache.flink</groupId>
-			<artifactId>flink-shaded-curator</artifactId>
+			<artifactId>flink-shaded-curator-recipes</artifactId>
 			<version>${project.version}</version>
 		</dependency>
 		
@@ -435,7 +417,7 @@ under the License.
 						<configuration>
 							<artifactSet>
 								<includes combine.children="append">
-									<include>org.apache.flink:flink-shaded-curator</include>
+									<include>org.apache.flink:flink-shaded-curator-recipes</include>
 								</includes>
 							</artifactSet>
 							<relocations combine.children="append">

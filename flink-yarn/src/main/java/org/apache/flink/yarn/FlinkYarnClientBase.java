@@ -110,7 +110,7 @@ public abstract class FlinkYarnClientBase extends AbstractFlinkYarnClient {
 	private Configuration conf;
 	private YarnClient yarnClient;
 	private YarnClientApplication yarnApplication;
-
+	private Thread deploymentFailureHook = new DeploymentFailureHook();
 
 	/**
 	 * Files (usually in a distributed file system) used for the YARN session of Flink.
@@ -256,7 +256,7 @@ public abstract class FlinkYarnClientBase extends AbstractFlinkYarnClient {
 		for(File shipFile: shipFiles) {
 			// remove uberjar from ship list (by default everything in the lib/ folder is added to
 			// the list of files to ship, but we handle the uberjar separately.
-			if(!(shipFile.getName().startsWith("flink-dist-") && shipFile.getName().endsWith("jar"))) {
+			if(!(shipFile.getName().startsWith("flink-dist") && shipFile.getName().endsWith("jar"))) {
 				this.shipFiles.add(shipFile);
 			}
 		}
@@ -492,7 +492,7 @@ public abstract class FlinkYarnClientBase extends AbstractFlinkYarnClient {
 			+ " -Xmx" + Utils.calculateHeapSize(jobManagerMemoryMb, flinkConfiguration) + "M " +javaOpts;
 
 		if(hasLogback || hasLog4j) {
-			amCommand += " -Dlog.file=\"" + ApplicationConstants.LOG_DIR_EXPANSION_VAR + "/jobmanager-main.log\"";
+			amCommand += " -Dlog.file=\"" + ApplicationConstants.LOG_DIR_EXPANSION_VAR + "/jobmanager.log\"";
 
 			if(hasLogback) {
 				amCommand += " -Dlogback.configurationFile=file:" + FlinkYarnSessionCli.CONFIG_FILE_LOGBACK_NAME;
@@ -505,8 +505,8 @@ public abstract class FlinkYarnClientBase extends AbstractFlinkYarnClient {
 
 		amCommand += " " + getApplicationMasterClass().getName() + " "
 			+ " 1>"
-			+ ApplicationConstants.LOG_DIR_EXPANSION_VAR + "/jobmanager-stdout.log"
-			+ " 2>" + ApplicationConstants.LOG_DIR_EXPANSION_VAR + "/jobmanager-stderr.log";
+			+ ApplicationConstants.LOG_DIR_EXPANSION_VAR + "/jobmanager.out"
+			+ " 2>" + ApplicationConstants.LOG_DIR_EXPANSION_VAR + "/jobmanager.err";
 		amContainer.setCommands(Collections.singletonList(amCommand));
 
 		LOG.debug("Application Master start command: " + amCommand);
@@ -629,13 +629,20 @@ public abstract class FlinkYarnClientBase extends AbstractFlinkYarnClient {
 			appContext.setQueue(yarnQueue);
 		}
 
+		// add a hook to clean up in case deployment fails
+		Runtime.getRuntime().addShutdownHook(deploymentFailureHook);
 		LOG.info("Submitting application master " + appId);
 		yarnClient.submitApplication(appContext);
 
 		LOG.info("Waiting for the cluster to be allocated");
 		int waittime = 0;
 		loop: while( true ) {
-			ApplicationReport report = yarnClient.getApplicationReport(appId);
+			ApplicationReport report;
+			try {
+				report = yarnClient.getApplicationReport(appId);
+			} catch (IOException e) {
+				throw new YarnDeploymentException("Failed to deploy the cluster: " + e.getMessage());
+			}
 			YarnApplicationState appState = report.getYarnApplicationState();
 			switch(appState) {
 				case FAILED:
@@ -659,6 +666,19 @@ public abstract class FlinkYarnClientBase extends AbstractFlinkYarnClient {
 			}
 			waittime += 1000;
 			Thread.sleep(1000);
+		}
+		// print the application id for user to cancel themselves.
+		if (isDetached()) {
+			LOG.info("The Flink YARN client has been started in detached mode. In order to stop " +
+					"Flink on YARN, use the following command or a YARN web interface to stop " +
+					"it:\nyarn application -kill " + appId + "\nPlease also note that the " +
+					"temporary files of the YARN session in the home directoy will not be removed.");
+		}
+		// since deployment was successful, remove the hook
+		try {
+			Runtime.getRuntime().removeShutdownHook(deploymentFailureHook);
+		} catch (IllegalStateException e) {
+			// we're already in the shut down hook.
 		}
 		// the Flink cluster is deployed in YARN. Represent cluster
 		return new FlinkYarnCluster(yarnClient, appId, conf, flinkConfiguration, sessionFilesDir, detached);
@@ -869,5 +889,20 @@ public abstract class FlinkYarnClientBase extends AbstractFlinkYarnClient {
 		}
 	}
 
+	private class DeploymentFailureHook extends Thread {
+		@Override
+		public void run() {
+			LOG.info("Cancelling deployment from Deployment Failure Hook");
+			failSessionDuringDeployment();
+			LOG.info("Deleting files in " + sessionFilesDir);
+			try {
+				FileSystem fs = FileSystem.get(conf);
+				fs.delete(sessionFilesDir, true);
+				fs.close();
+			} catch (IOException e) {
+				LOG.error("Failed to delete Flink Jar and conf files in HDFS", e);
+			}
+		}
+	}
 }
 
