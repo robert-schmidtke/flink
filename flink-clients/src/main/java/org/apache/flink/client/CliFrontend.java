@@ -67,12 +67,14 @@ import org.apache.flink.optimizer.plan.StreamingPlan;
 import org.apache.flink.optimizer.plandump.PlanJSONDumpGenerator;
 import org.apache.flink.runtime.akka.AkkaUtils;
 import org.apache.flink.runtime.client.JobStatusMessage;
+import org.apache.flink.runtime.executiongraph.ExecutionGraph;
 import org.apache.flink.runtime.instance.ActorGateway;
 import org.apache.flink.runtime.leaderretrieval.LeaderRetrievalService;
 import org.apache.flink.runtime.messages.JobManagerMessages;
 import org.apache.flink.runtime.security.SecurityUtils;
 import org.apache.flink.runtime.util.EnvironmentInformation;
 import org.apache.flink.runtime.util.LeaderRetrievalUtils;
+import org.apache.flink.runtime.webmonitor.handlers.JobDetailsHandler;
 import org.apache.flink.runtime.yarn.AbstractFlinkYarnClient;
 import org.apache.flink.api.common.JobID;
 import org.apache.flink.runtime.jobgraph.JobStatus;
@@ -297,7 +299,7 @@ public class CliFrontend {
 			return handleError(t);
 		}
 
-		int exitCode = 1;
+		Tuple2<JobID, Integer> exitCode = new Tuple2<JobID, Integer>(null, 1);
 		try {
 			int userParallelism = options.getParallelism();
 			LOG.debug("User parallelism is set to {}", userParallelism);
@@ -326,6 +328,30 @@ public class CliFrontend {
 					exitCode = executeProgramBlocking(program, client, userParallelism);
 				}
 
+				ListOptions listOptions = CliFrontendParser.parseListCommand(new String[] {
+					"-m", yarnCluster.getJobManagerAddress().getHostString() + ":" + yarnCluster.getJobManagerAddress().getPort() });
+				ActorGateway jobManagerGateway = getJobManagerGateway(listOptions);
+
+				LOG.info("Fetching Job Details for Job {}", exitCode.f0.toString());
+				Future<Object> requestJobResponse = jobManagerGateway.ask(
+							new JobManagerMessages.RequestJob(exitCode.f0),
+							askTimeout);
+				Object requestJobResult;
+				try {
+					requestJobResult = Await.result(requestJobResponse, askTimeout);
+					if (requestJobResult instanceof JobManagerMessages.JobFound) {
+						ExecutionGraph eg = ((JobManagerMessages.JobFound) requestJobResult).executionGraph();
+						String egString = new JobDetailsHandler(null).handleRequest(eg, null);
+						LOG.info(egString);
+					} else if (requestJobResult instanceof JobManagerMessages.JobNotFound) {
+						LOG.warn("Details for Job {} not available", exitCode.f0.toString());
+					} else {
+						LOG.warn("Unknown error during fetching of details for Job {}", exitCode.f0.toString());
+					}
+				} catch (Exception e) {
+					LOG.error("Could not fetch Job Details for Job {}", exitCode.f0.toString());
+				}
+
 				// show YARN cluster status if its not a detached YARN cluster.
 				if (yarnCluster != null && !yarnCluster.isDetached()) {
 					List<String> msgs = yarnCluster.getNewMessages();
@@ -342,7 +368,7 @@ public class CliFrontend {
 					}
 				}
 
-				return exitCode;
+				return exitCode.f1;
 			}
 			finally {
 				client.shutdown();
@@ -354,7 +380,7 @@ public class CliFrontend {
 		finally {
 			if (yarnCluster != null && !yarnCluster.isDetached()) {
 				logAndSysout("Shutting down YARN cluster");
-				yarnCluster.shutdown(exitCode != 0);
+				yarnCluster.shutdown(exitCode.f1 != 0);
 			}
 			if (program != null) {
 				program.deleteExtractedLibraries();
@@ -644,14 +670,14 @@ public class CliFrontend {
 	//  Interaction with programs and JobManager
 	// --------------------------------------------------------------------------------------------
 
-	protected int executeProgramDetached(PackagedProgram program, Client client, int parallelism) {
+	protected Tuple2<JobID, Integer> executeProgramDetached(PackagedProgram program, Client client, int parallelism) {
 		LOG.info("Starting execution of program");
 
 		JobSubmissionResult result;
 		try {
 			result = client.runDetached(program, parallelism);
 		} catch (ProgramInvocationException e) {
-			return handleError(e);
+			return new Tuple2<JobID, Integer>(null, handleError(e));
 		} finally {
 			program.deleteExtractedLibraries();
 		}
@@ -665,10 +691,10 @@ public class CliFrontend {
 			System.out.println("Job has been submitted with JobID " + result.getJobID());
 		}
 
-		return 0;
+		return new Tuple2<JobID, Integer>(result.getJobID(), 0);
 	}
 
-	protected int executeProgramBlocking(PackagedProgram program, Client client, int parallelism) {
+	protected Tuple2<JobID, Integer> executeProgramBlocking(PackagedProgram program, Client client, int parallelism) {
 		LOG.info("Starting execution of program");
 
 		JobSubmissionResult result;
@@ -676,7 +702,7 @@ public class CliFrontend {
 			result = client.runBlocking(program, parallelism);
 		}
 		catch (ProgramInvocationException e) {
-			return handleError(e);
+			return new Tuple2<JobID, Integer>(null, handleError(e));
 		}
 		finally {
 			program.deleteExtractedLibraries();
@@ -695,7 +721,7 @@ public class CliFrontend {
 			}
 		}
 
-		return 0;
+		return new Tuple2<JobID, Integer>(result.getJobID(), 0);
 	}
 
 	/**

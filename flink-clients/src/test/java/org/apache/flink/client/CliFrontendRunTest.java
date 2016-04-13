@@ -25,6 +25,8 @@ import static org.junit.Assert.*;
 import org.apache.flink.client.cli.CommandLineOptions;
 import org.apache.flink.client.program.Client;
 import org.apache.flink.client.program.PackagedProgram;
+import org.apache.flink.api.common.JobID;
+import org.apache.flink.api.java.tuple.Tuple2;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.mockito.Mockito;
@@ -104,15 +106,15 @@ public class CliFrontendRunTest {
 		}
 
 		@Override
-		protected int executeProgramDetached(PackagedProgram program, Client client, int parallelism) {
+		protected Tuple2<JobID, Integer> executeProgramDetached(PackagedProgram program, Client client, int parallelism) {
 			assertEquals(this.expectedParallelism, parallelism);
 			assertEquals(this.sysoutLogging, client.getPrintStatusDuringExecution());
-			return 0;
+			return new Tuple2<JobID, Integer>(null, 0);
 		}
 
 		@Override
-		protected int executeProgramBlocking(PackagedProgram program, Client client, int parallelism) {
-			return 0;
+		protected Tuple2<JobID, Integer> executeProgramBlocking(PackagedProgram program, Client client, int parallelism) {
+			return new Tuple2<JobID, Integer>(null, 0);
 		}
 
 		@Override
