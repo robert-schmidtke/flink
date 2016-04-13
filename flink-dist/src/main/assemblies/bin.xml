@@ -59,6 +59,12 @@ under the License.
 			<outputDirectory>conf</outputDirectory>
 			<fileMode>0644</fileMode>
 		</file>
+
+		<file>
+                        <source>src/main/resources/flink-conf.yaml.template</source>
+                        <outputDirectory>conf</outputDirectory>
+                        <fileMode>0644</fileMode>
+                </file>
 	</files>
 
 	<fileSets>
