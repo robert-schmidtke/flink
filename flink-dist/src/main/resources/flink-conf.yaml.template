@@ -52,6 +52,7 @@ taskmanager.numberOfTaskSlots: 1
 
 parallelism.default: 1
 
+taskmanager.memory.off-heap: true
 
 #==============================================================================
 # Web Frontend
